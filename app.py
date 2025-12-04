@@ -128,11 +128,13 @@ with col2:
         else:
             try:
                 genai.configure(api_key=api_key)
-                # Use Gemini 1.5 Flash for speed/cost, or 1.5 Pro for quality
-                 = genai.Generative(
-                    model_name="gemini-2.5-flash",
+                
+                # --- MODEL CONFIGURATION ---
+                model = genai.GenerativeModel(
+                    model_name="gemini-1.5-flash", 
                     system_instruction=system_prompt
                 )
+                
                 with st.spinner("Translating..."):
                     response = model.generate_content(yiddish_text)
                     st.session_state['result'] = response.text
@@ -151,6 +153,5 @@ with col2:
             label="Download Word Doc",
             data=bio.getvalue(),
             file_name="translation.docx",
-            mime="application/docx"
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
-
