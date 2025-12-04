@@ -6,8 +6,8 @@ import time
 import pandas as pd
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Sicha Translator V27 (Smart Table)", layout="wide")
-st.title("⚡ Sicha Translator (Clean Table V27)")
+st.set_page_config(page_title="Sicha Translator V28 (No Skipping)", layout="wide")
+st.title("⚡ Sicha Translator (Complete V28)")
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -18,18 +18,20 @@ with st.sidebar:
     st.divider()
     st.info("ℹ️ **Auto-Pilot Active:** System will find the best model for your key.")
 
-    # --- THE V27 MASTER PROMPT (JSON/STRUCTURED) ---
+    # --- THE V28 MASTER PROMPT (ATOMIC SEGMENTATION) ---
     default_prompt = """
 # Role
 You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Sichos.
 
-# MODULE A: THE "JANITOR" (Source Cleaning)
-* **CRITICAL:** When outputting the Yiddish Source column, you must CLEAN the text.
-* **Remove:** Random symbols (??, *, #), OCR artifacts, and parenthetical interruptions.
-* **Retain:** The actual spoken words.
+# MODULE A: ANTI-LAZINESS (CRITICAL)
+* **THE PROBLEM:** Do NOT skip text. Do NOT summarize.
+* **THE FIX:** You must translate **every single sentence** and clause.
+* **SEGMENTATION:** Do not output large blocks of text in a single row. Break the Yiddish down into small, subtitle-length chunks (1-2 sentences max) per row.
+* **Logic:** If the Yiddish input has 10 distinct thoughts, you MUST output 10 distinct rows.
 
-# MODULE B: FIDELITY (The "Zero-Loss" Rule)
-* **CRITICAL:** Do not summarize. Every distinct thought in the Yiddish must have a corresponding English phrase.
+# MODULE B: THE "JANITOR" (Source Cleaning)
+* When outputting the Yiddish Source column, clean the text.
+* Remove: Random symbols (??, *, #), OCR artifacts, and parenthetical interruptions.
 
 # MODULE C: NARRATIVE VOICE & THEOLOGY
 * **Voice Attribution:** Insert tags: "**Moses reasoned**, 'If another person...'"
@@ -41,22 +43,17 @@ You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Si
 * *Der Rebbe* -> "**My father-in-law, the Rebbe.**"
 
 # MODULE E: VISUAL STRUCTURE (The "Tilde" Rule)
-* **CRITICAL:** Subtitles must be readable in seconds.
 * **Action:** Break English text into short lines (3-7 words max).
-* **Format:** Use the tilde symbol `~` to indicate a visual line break inside a subtitle.
+* **Format:** Use the tilde symbol `~` to indicate a visual line break inside a single subtitle row.
     * *Bad:* "The government will not disturb; on the contrary, it will help."
     * *Good:* "The government will not disturb;~on the contrary, it will help."
 
-# MODULE F: SYNTAX
-* Active Voice. No Intro Fillers.
+# OUTPUT FORMAT RULE (Pipe-Separated)
+Output a Pipe-Separated Table.
+ID | Yiddish (Cleaned) | English Subtitle
 
-# OUTPUT FORMAT RULE (CRITICAL)
-Provide the output as a Pipe-Separated List (CSV style) with exactly 3 columns:
-ID | Yiddish Cleaned | English Subtitle
-
-Example:
-001 | Clean Yiddish text here | English text line one~English text line two
-002 | Next Yiddish text | Next English translation
+001 | (Small Yiddish Chunk) | (English Translation)
+002 | (Next Small Chunk) | (Next Translation)
     """
     
     with st.expander("Advanced: Edit System Prompt"):
