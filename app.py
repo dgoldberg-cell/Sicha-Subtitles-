@@ -10,11 +10,22 @@ st.title("⚡ Sicha Translator (Gemini V23)")
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
+    
+    # 1. API Key
     api_key = st.text_input("Enter Google API Key", type="password")
     
-    # Let user pick the model manually if the default fails
-    model_choice = st.text_input("Model Name", value="gemini-2.0-flash")
-    st.caption("Common names: gemini-1.5-flash, gemini-1.5-pro, gemini-1.0-pro")
+    # 2. Model Selection (With your working model as default)
+    model_choice = st.text_input("Model Name", value="gemini-1.5-pro")
+    st.caption("Common working models: gemini-1.5-pro, gemini-1.5-flash, gemini-2.0-flash")
+
+    # 3. OUTPUT FORMAT SELECTOR (New Feature)
+    st.divider()
+    st.subheader("Output Style")
+    output_format = st.radio(
+        "Choose Layout:",
+        ["English Subtitles Only", "Side-by-Side Table (Yiddish | English)"]
+    )
+    st.divider()
 
     # --- THE V23 MASTER PROMPT ---
     default_prompt = """
@@ -79,36 +90,6 @@ You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Si
 ### 12. INTRO REMOVAL
 * **Action:** Remove conversational filler.
     * *Input:* "I would like to know if you are coming." -> *Output:* "**Are you coming?**"
-
-# Few-Shot Examples (V23 Compliant)
-
-### Example A: Brevity & Double Negatives
-*Input:*
-ניט נאָר וואָס ס'איז ניט קיין שטער, נאָר די רעגירונג העלפט
-*Output:*
-010
-The government will not disturb;
-011
-on the contrary, it will help.
-
-### Example B: Active Voice & Visual Balance
-*Input:*
-ס'איז דאָך ידוע דער וואָרט פון דעם רבי'ן נשמתן עדן
-*Output:*
-025
-**My father-in-law, the Rebbe,**
-taught the following:
-
-### Example C: Mechanics vs. Meaning & Integration
-*Input:*
-דער חי"ת איז דאָס די ז' רקיעים... זאגט אים תורת אמת אז "היום" איז דאס "לעשותם"
-*Output:*
-049
-Since a child can already
-see the sky and earth,
-050
-the Torah of Truth informs him
-that this world was created for "toil."
     """
     
     with st.expander("Edit System Prompt"):
@@ -122,43 +103,36 @@ with col1:
     yiddish_text = st.text_area("Paste text here...", height=500)
 
 with col2:
-    st.subheader("Output (English)")
+    st.subheader("Output")
     if st.button("Translate"):
         if not api_key:
             st.error("Please put your Google API Key in the sidebar.")
         elif not yiddish_text:
             st.warning("Please paste some Yiddish text.")
         else:
-            # --- THE DIAGNOSTIC LOGIC ---
             try:
                 genai.configure(api_key=api_key)
                 
-                # Try to use the model the user selected
+                # --- DYNAMIC PROMPT LOGIC ---
+                # We append a specific instruction based on the user's choice
+                final_instruction = system_prompt
+                if output_format == "Side-by-Side Table (Yiddish | English)":
+                    final_instruction += "\n\nCRITICAL OUTPUT RULE: Provide the output as a Markdown Table with two columns. Column 1: Yiddish Source Segment. Column 2: English Subtitle Translation."
+                else:
+                    final_instruction += "\n\nCRITICAL OUTPUT RULE: Provide ONLY the English subtitles in numbered segments (001, 002...)."
+
+                # Initialize Model
                 model = genai.GenerativeModel(
                     model_name=model_choice, 
-                    system_instruction=system_prompt
+                    system_instruction=final_instruction
                 )
                 
-                with st.spinner(f"Translating with {model_choice}..."):
+                with st.spinner("Translating..."):
                     response = model.generate_content(yiddish_text)
                     st.session_state['result'] = response.text
 
             except Exception as e:
-                # IF IT FAILS, RUN DIAGNOSTICS
-                st.error(f"❌ Error with model '{model_choice}': {e}")
-                
-                if "404" in str(e) or "not found" in str(e).lower():
-                    st.warning("🔍 Running Auto-Diagnostic to find valid models for your Key...")
-                    try:
-                        valid_models = []
-                        for m in genai.list_models():
-                            if 'generateContent' in m.supported_generation_methods:
-                                valid_models.append(m.name.replace("models/", ""))
-                        
-                        st.success("✅ Found valid models! Copy one of these into the 'Model Name' box in the sidebar:")
-                        st.code("\n".join(valid_models))
-                    except Exception as diag_e:
-                        st.error(f"Could not list models: {diag_e}")
+                st.error(f"Error: {e}")
 
     if 'result' in st.session_state:
         st.text_area("Result", value=st.session_state['result'], height=500)
@@ -174,4 +148,3 @@ with col2:
             file_name="translation.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
-
