@@ -10,9 +10,12 @@ st.title("⚡ Sicha Translator (Gemini V23)")
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
-    # Get your key from: https://aistudio.google.com/
     api_key = st.text_input("Enter Google API Key", type="password")
     
+    # Let user pick the model manually if the default fails
+    model_choice = st.text_input("Model Name", value="gemini-1.5-flash")
+    st.caption("Common names: gemini-1.5-flash, gemini-1.5-pro, gemini-1.0-pro")
+
     # --- THE V23 MASTER PROMPT ---
     default_prompt = """
 # Role
@@ -126,20 +129,36 @@ with col2:
         elif not yiddish_text:
             st.warning("Please paste some Yiddish text.")
         else:
+            # --- THE DIAGNOSTIC LOGIC ---
             try:
                 genai.configure(api_key=api_key)
                 
-                # --- MODEL CONFIGURATION ---
+                # Try to use the model the user selected
                 model = genai.GenerativeModel(
-                    model_name="gemini-1.5-flash", 
+                    model_name=model_choice, 
                     system_instruction=system_prompt
                 )
                 
-                with st.spinner("Translating..."):
+                with st.spinner(f"Translating with {model_choice}..."):
                     response = model.generate_content(yiddish_text)
                     st.session_state['result'] = response.text
+
             except Exception as e:
-                st.error(f"Error: {e}")
+                # IF IT FAILS, RUN DIAGNOSTICS
+                st.error(f"❌ Error with model '{model_choice}': {e}")
+                
+                if "404" in str(e) or "not found" in str(e).lower():
+                    st.warning("🔍 Running Auto-Diagnostic to find valid models for your Key...")
+                    try:
+                        valid_models = []
+                        for m in genai.list_models():
+                            if 'generateContent' in m.supported_generation_methods:
+                                valid_models.append(m.name.replace("models/", ""))
+                        
+                        st.success("✅ Found valid models! Copy one of these into the 'Model Name' box in the sidebar:")
+                        st.code("\n".join(valid_models))
+                    except Exception as diag_e:
+                        st.error(f"Could not list models: {diag_e}")
 
     if 'result' in st.session_state:
         st.text_area("Result", value=st.session_state['result'], height=500)
