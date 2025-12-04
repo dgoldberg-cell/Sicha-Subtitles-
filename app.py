@@ -6,8 +6,8 @@ import time
 import pandas as pd
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Sicha Translator V28 (No Skipping)", layout="wide")
-st.title("⚡ Sicha Translator (Complete V28)")
+st.set_page_config(page_title="Sicha Translator V29 (Storyteller Core)", layout="wide")
+st.title("⚡ Sicha Translator (Storyteller Core V29)")
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -18,42 +18,70 @@ with st.sidebar:
     st.divider()
     st.info("ℹ️ **Auto-Pilot Active:** System will find the best model for your key.")
 
-    # --- THE V28 MASTER PROMPT (ATOMIC SEGMENTATION) ---
+    # --- THE V23 MASTER PROMPT (THE "GOOD" ONE) ---
+    # We use this EXACT text because you confirmed it translates best.
     default_prompt = """
 # Role
-You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Sichos.
+You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Sichos. Your goal is to produce **narrative, high-impact English** that focuses on the *character's voice* and *intended meaning* while adhering to strict video-subtitle standards.
 
-# MODULE A: ANTI-LAZINESS (CRITICAL)
-* **THE PROBLEM:** Do NOT skip text. Do NOT summarize.
-* **THE FIX:** You must translate **every single sentence** and clause.
-* **SEGMENTATION:** Do not output large blocks of text in a single row. Break the Yiddish down into small, subtitle-length chunks (1-2 sentences max) per row.
-* **Logic:** If the Yiddish input has 10 distinct thoughts, you MUST output 10 distinct rows.
+# MODULE A: FIDELITY (The "Zero-Loss" Rule)
+* **CRITICAL:** Do not summarize. Every distinct thought in the Yiddish must have a corresponding English phrase.
+* **Action:** Change structure for flow, but never remove content.
 
-# MODULE B: THE "JANITOR" (Source Cleaning)
-* When outputting the Yiddish Source column, clean the text.
-* Remove: Random symbols (??, *, #), OCR artifacts, and parenthetical interruptions.
+# MODULE B: NARRATIVE VOICE & THEOLOGY
+### 1. VOICE ATTRIBUTION
+* **Action:** Insert tags to describe internal thought processes.
+* *Input:* "If the other person..." -> *Output:* "**Moses reasoned**, 'If another person...'"
 
-# MODULE C: NARRATIVE VOICE & THEOLOGY
-* **Voice Attribution:** Insert tags: "**Moses reasoned**, 'If another person...'"
-* **Phenomenon:** Describe effect. "Nimna Hanimnaos" -> "**God, who is Infinite, and therefore contains the finite.**"
-* **Quotes:** Liturgy = Literal. Prooftext = Meaning.
+### 2. PHENOMENON OVER LABEL
+* **Action:** Describe the effect/meaning, not the technical label.
+* *Input:* "Nimna Hanimnaos" -> *Output:* "**God, who is Infinite, and therefore contains the finite.**"
 
-# MODULE D: CULTURAL TRANSLATION
-* *Adam* -> "**Created in God's image.**"
-* *Der Rebbe* -> "**My father-in-law, the Rebbe.**"
+### 3. THE "QUOTE CONTEXT" RULE
+* **Liturgy:** Translate objects of study literally ("**Hear O Israel...**").
+* **Prooftext:** Translate the point of the quote ("**Man was born to toil**").
+* **Integration:** Weave quotes into grammar; avoid colons.
 
-# MODULE E: VISUAL STRUCTURE (The "Tilde" Rule)
-* **Action:** Break English text into short lines (3-7 words max).
-* **Format:** Use the tilde symbol `~` to indicate a visual line break inside a single subtitle row.
-    * *Bad:* "The government will not disturb; on the contrary, it will help."
-    * *Good:* "The government will not disturb;~on the contrary, it will help."
+# MODULE C: CULTURAL & LINGUISTIC TRANSLATION
+### 4. CONCEPT OVER ETYMOLOGY (The "Adam" Rule)
+* **Action:** Translate the *implication*. *Adam* -> "**Created in God's image.**"
 
-# OUTPUT FORMAT RULE (Pipe-Separated)
-Output a Pipe-Separated Table.
-ID | Yiddish (Cleaned) | English Subtitle
+### 5. MECHANICS VS. MEANING
+* **Action:** If text uses mechanics (Gematria/Letters) to explain a concept, translate the **concept**.
+* *Input:* "Ches is 7 heavens..." -> *Output:* "**Since a child sees the heavens and earth...**"
 
-001 | (Small Yiddish Chunk) | (English Translation)
-002 | (Next Small Chunk) | (Next Translation)
+### 6. RELATIONAL TITLES
+* **Action:** *Der Rebbe (Nishmaso Eden)* -> "**My father-in-law, the Rebbe.**"
+
+# MODULE D: VISUAL STRUCTURE & RHYTHM
+### 7. VERTICAL RHYTHM & BALANCE
+* **Logic:** Subtitles must be readable in seconds.
+* **Action:**
+    * **Length:** Max 40 characters (approx 3-7 words) per line.
+    * **Balance:** If using 2 lines, keep them roughly equal in length.
+    * **Grammatical Breaks:** Never break a line between an adjective and noun, or preposition and object.
+
+### 8. LOGICAL BRIDGING
+* **Action:** Insert connectors: **"But first," "However," "Simply put."**
+
+# MODULE E: SYNTAX & BREVITY (The "Manual" Rules)
+### 9. ACTIVE VOICE CONVERSION
+* **Logic:** Passive voice wastes space and time.
+* **Action:** Convert to Active.
+    * *Input:* "It is believed by many..." -> *Output:* "**Many believe...**"
+
+### 10. POSITIVE PHRASING
+* **Logic:** Negative phrasing ("Place we hadn't been") is wordy.
+* **Action:** Convert to Positive ("**A new place**").
+
+### 11. THE DOUBLE-NEGATIVE FIX
+* **Logic:** Double negatives ("Not only will they not disturb") are confusing on screen.
+* **Action:** Flip to Positive + Contrast.
+    * *Input:* "Not only will they not disturb..." -> *Output:* "**The government will not disturb; / on the contrary, it will help.**"
+
+### 12. INTRO REMOVAL
+* **Action:** Remove conversational filler.
+    * *Input:* "I would like to know if you are coming." -> *Output:* "**Are you coming?**"
     """
     
     with st.expander("Advanced: Edit System Prompt"):
@@ -77,9 +105,9 @@ with col1:
     yiddish_text = st.text_area("Paste text here...", height=600)
 
 with col2:
-    st.subheader("Output (Preview)")
+    st.subheader("Output")
     
-    if st.button("Translate", type="primary"):
+    if st.button("Translate (Storyteller)", type="primary"):
         if not api_key:
             st.error("Please put your Google API Key in the sidebar.")
         elif not yiddish_text:
@@ -91,10 +119,22 @@ with col2:
             status_box = st.empty()
             genai.configure(api_key=api_key)
 
+            # --- DYNAMIC INSTRUCTIONS (THE SECRET SAUCE) ---
+            # We append the technical rules HERE, so they don't mess up the creative prompt.
+            final_instruction = system_prompt + """
+            
+            # FORMATTING INSTRUCTIONS (CRITICAL)
+            1. **Output Format:** Provide a Pipe-Separated Table with 3 columns:
+               ID | Yiddish Cleaned | English Subtitle
+            2. **Yiddish Column:** You MUST clean the Yiddish text (remove OCR errors, brackets, artifacts).
+            3. **English Column:** Use the tilde symbol `~` to indicate a visual line break inside the English text (e.g., "The light shines~ever the brighter").
+            4. **Completeness:** Translate EVERY sentence. Do not skip.
+            """
+
             for model_name in MODEL_PRIORITY:
                 try:
                     status_box.caption(f"🚀 Trying model: **{model_name}**...")
-                    model = genai.GenerativeModel(model_name=model_name, system_instruction=system_prompt)
+                    model = genai.GenerativeModel(model_name=model_name, system_instruction=final_instruction)
                     response = model.generate_content(yiddish_text)
                     st.session_state['result'] = response.text
                     st.session_state['used_model'] = model_name
@@ -115,12 +155,12 @@ with col2:
         # Parse the Pipe-Separated Text into a Dataframe
         data = []
         for line in raw_text.split('\n'):
-            if "|" in line and "ID |" not in line and "---" not in line: # Skip headers/garbage
+            if "|" in line and "ID |" not in line and "---" not in line: 
                 parts = line.split('|')
                 if len(parts) >= 3:
                     row_id = parts[0].strip()
                     yiddish = parts[1].strip()
-                    # Convert ~ to HTML Break for Screen, Keep ~ for logic
+                    # Convert ~ to HTML Break for Screen
                     english_raw = parts[2].strip()
                     english_html = english_raw.replace("~", "<br>") 
                     data.append({"#": row_id, "Yiddish": yiddish, "English": english_html, "English_Raw": english_raw})
@@ -128,7 +168,7 @@ with col2:
         if data:
             df = pd.DataFrame(data)
             
-            # 1. DISPLAY TABLE (With HTML rendering for breaks)
+            # 1. DISPLAY TABLE (Clean & Storyteller Style)
             st.markdown(
                 df[['#', 'Yiddish', 'English']].to_html(escape=False, index=False), 
                 unsafe_allow_html=True
@@ -136,7 +176,7 @@ with col2:
             
             st.divider()
             
-            # 2. CREATE WORD DOC (With Real Line Breaks)
+            # 2. CREATE WORD DOC (Clean)
             doc = Document()
             doc.add_heading(f"Translation ({st.session_state.get('used_model')})", 0)
             
@@ -151,7 +191,6 @@ with col2:
                 row_cells = table.add_row().cells
                 row_cells[0].text = row['#']
                 row_cells[1].text = row['Yiddish']
-                # Replace Tilde with Real Line Break in Word
                 clean_english = row['English_Raw'].replace("~", "\n")
                 row_cells[2].text = clean_english
 
@@ -165,5 +204,6 @@ with col2:
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
         else:
-            st.warning("Translation complete, but table parsing failed. Raw output below:")
+            # Fallback if table parsing fails (rare)
+            st.warning("Could not format as table. Raw output:")
             st.text(raw_text)
