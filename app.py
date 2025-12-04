@@ -13,7 +13,7 @@ with st.sidebar:
     api_key = st.text_input("Enter Google API Key", type="password")
     
     # Let user pick the model manually if the default fails
-    model_choice = st.text_input("Model Name", value="gemini-1.5-flash")
+    model_choice = st.text_input("Model Name", value="gemini-2.0-flash")
     st.caption("Common names: gemini-1.5-flash, gemini-1.5-pro, gemini-1.0-pro")
 
     # --- THE V23 MASTER PROMPT ---
@@ -174,3 +174,4 @@ with col2:
             file_name="translation.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
+
