@@ -6,82 +6,48 @@ import time
 import pandas as pd
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Sicha Translator V29 (Storyteller Core)", layout="wide")
-st.title("⚡ Sicha Translator (Storyteller Core V29)")
+st.set_page_config(page_title="Sicha Translator V30 (Vertical Flow)", layout="wide")
+st.title("⚡ Sicha Translator (Vertical Flow V30)")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
-    
     api_key = st.text_input("Enter Google API Key", type="password")
-    
     st.divider()
     st.info("ℹ️ **Auto-Pilot Active:** System will find the best model for your key.")
 
-    # --- THE V23 MASTER PROMPT (THE "GOOD" ONE) ---
-    # We use this EXACT text because you confirmed it translates best.
+    # --- THE V30 MASTER PROMPT (VERTICAL LIST) ---
     default_prompt = """
 # Role
-You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Sichos. Your goal is to produce **narrative, high-impact English** that focuses on the *character's voice* and *intended meaning* while adhering to strict video-subtitle standards.
+You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Sichos.
 
-# MODULE A: FIDELITY (The "Zero-Loss" Rule)
-* **CRITICAL:** Do not summarize. Every distinct thought in the Yiddish must have a corresponding English phrase.
-* **Action:** Change structure for flow, but never remove content.
+# MODULE A: FIDELITY
+* Do not summarize. Translate every thought.
 
-# MODULE B: NARRATIVE VOICE & THEOLOGY
-### 1. VOICE ATTRIBUTION
-* **Action:** Insert tags to describe internal thought processes.
-* *Input:* "If the other person..." -> *Output:* "**Moses reasoned**, 'If another person...'"
+# MODULE B: NARRATIVE & THEOLOGY
+* **Voice:** "Moses reasoned..."
+* **Concepts:** Describe meaning, not labels.
+* **Quotes:** Liturgy = Literal. Prooftext = Meaning.
 
-### 2. PHENOMENON OVER LABEL
-* **Action:** Describe the effect/meaning, not the technical label.
-* *Input:* "Nimna Hanimnaos" -> *Output:* "**God, who is Infinite, and therefore contains the finite.**"
+# MODULE C: CULTURAL
+* *Adam* -> "Created in God's image."
+* *Der Rebbe* -> "My father-in-law, the Rebbe."
 
-### 3. THE "QUOTE CONTEXT" RULE
-* **Liturgy:** Translate objects of study literally ("**Hear O Israel...**").
-* **Prooftext:** Translate the point of the quote ("**Man was born to toil**").
-* **Integration:** Weave quotes into grammar; avoid colons.
+# MODULE D: VISUAL STRUCTURE (The "Vertical Flow")
+* **CRITICAL:** Output must be a vertical list of subtitles.
+* **Length:** Keep lines short (3-7 words).
+* **Format:** Use the tilde `~` to split a single subtitle into two lines if needed.
 
-# MODULE C: CULTURAL & LINGUISTIC TRANSLATION
-### 4. CONCEPT OVER ETYMOLOGY (The "Adam" Rule)
-* **Action:** Translate the *implication*. *Adam* -> "**Created in God's image.**"
+# OUTPUT FORMAT RULE (Strict Pipe-List)
+Provide the output as a simple list with 3 columns separated by pipes (|).
+Do NOT use Markdown Table syntax (no dashes ---). Just raw lines.
 
-### 5. MECHANICS VS. MEANING
-* **Action:** If text uses mechanics (Gematria/Letters) to explain a concept, translate the **concept**.
-* *Input:* "Ches is 7 heavens..." -> *Output:* "**Since a child sees the heavens and earth...**"
+Format:
+ID | Yiddish Cleaned | English Subtitle
 
-### 6. RELATIONAL TITLES
-* **Action:** *Der Rebbe (Nishmaso Eden)* -> "**My father-in-law, the Rebbe.**"
-
-# MODULE D: VISUAL STRUCTURE & RHYTHM
-### 7. VERTICAL RHYTHM & BALANCE
-* **Logic:** Subtitles must be readable in seconds.
-* **Action:**
-    * **Length:** Max 40 characters (approx 3-7 words) per line.
-    * **Balance:** If using 2 lines, keep them roughly equal in length.
-    * **Grammatical Breaks:** Never break a line between an adjective and noun, or preposition and object.
-
-### 8. LOGICAL BRIDGING
-* **Action:** Insert connectors: **"But first," "However," "Simply put."**
-
-# MODULE E: SYNTAX & BREVITY (The "Manual" Rules)
-### 9. ACTIVE VOICE CONVERSION
-* **Logic:** Passive voice wastes space and time.
-* **Action:** Convert to Active.
-    * *Input:* "It is believed by many..." -> *Output:* "**Many believe...**"
-
-### 10. POSITIVE PHRASING
-* **Logic:** Negative phrasing ("Place we hadn't been") is wordy.
-* **Action:** Convert to Positive ("**A new place**").
-
-### 11. THE DOUBLE-NEGATIVE FIX
-* **Logic:** Double negatives ("Not only will they not disturb") are confusing on screen.
-* **Action:** Flip to Positive + Contrast.
-    * *Input:* "Not only will they not disturb..." -> *Output:* "**The government will not disturb; / on the contrary, it will help.**"
-
-### 12. INTRO REMOVAL
-* **Action:** Remove conversational filler.
-    * *Input:* "I would like to know if you are coming." -> *Output:* "**Are you coming?**"
+Example:
+001 | (Yiddish Text) | English line one~English line two
+002 | (Yiddish Text) | Next English line
     """
     
     with st.expander("Advanced: Edit System Prompt"):
@@ -107,7 +73,7 @@ with col1:
 with col2:
     st.subheader("Output")
     
-    if st.button("Translate (Storyteller)", type="primary"):
+    if st.button("Translate", type="primary"):
         if not api_key:
             st.error("Please put your Google API Key in the sidebar.")
         elif not yiddish_text:
@@ -116,70 +82,54 @@ with col2:
             
             # --- AUTO-PILOT LOOP ---
             success = False
-            status_box = st.empty()
             genai.configure(api_key=api_key)
-
-            # --- DYNAMIC INSTRUCTIONS (THE SECRET SAUCE) ---
-            # We append the technical rules HERE, so they don't mess up the creative prompt.
-            final_instruction = system_prompt + """
-            
-            # FORMATTING INSTRUCTIONS (CRITICAL)
-            1. **Output Format:** Provide a Pipe-Separated Table with 3 columns:
-               ID | Yiddish Cleaned | English Subtitle
-            2. **Yiddish Column:** You MUST clean the Yiddish text (remove OCR errors, brackets, artifacts).
-            3. **English Column:** Use the tilde symbol `~` to indicate a visual line break inside the English text (e.g., "The light shines~ever the brighter").
-            4. **Completeness:** Translate EVERY sentence. Do not skip.
-            """
 
             for model_name in MODEL_PRIORITY:
                 try:
-                    status_box.caption(f"🚀 Trying model: **{model_name}**...")
-                    model = genai.GenerativeModel(model_name=model_name, system_instruction=final_instruction)
+                    model = genai.GenerativeModel(model_name=model_name, system_instruction=system_prompt)
                     response = model.generate_content(yiddish_text)
                     st.session_state['result'] = response.text
                     st.session_state['used_model'] = model_name
                     success = True
-                    status_box.success(f"✅ Success! Used model: **{model_name}**")
                     break 
                 except Exception as e:
                     print(f"Model {model_name} failed: {e}")
                     time.sleep(0.5)
 
             if not success:
-                st.error("❌ All models failed. Please check your API Key.")
+                st.error("❌ All models failed.")
 
     # --- RESULT PROCESSING ---
     if 'result' in st.session_state:
         raw_text = st.session_state['result']
         
-        # Parse the Pipe-Separated Text into a Dataframe
+        # Parse data
         data = []
         for line in raw_text.split('\n'):
-            if "|" in line and "ID |" not in line and "---" not in line: 
+            if "|" in line and "ID |" not in line:
                 parts = line.split('|')
                 if len(parts) >= 3:
-                    row_id = parts[0].strip()
-                    yiddish = parts[1].strip()
-                    # Convert ~ to HTML Break for Screen
-                    english_raw = parts[2].strip()
-                    english_html = english_raw.replace("~", "<br>") 
-                    data.append({"#": row_id, "Yiddish": yiddish, "English": english_html, "English_Raw": english_raw})
+                    data.append({
+                        "#": parts[0].strip(), 
+                        "Yiddish": parts[1].strip(), 
+                        "English": parts[2].strip().replace("~", "<br>")
+                    })
         
         if data:
             df = pd.DataFrame(data)
             
-            # 1. DISPLAY TABLE (Clean & Storyteller Style)
-            st.markdown(
-                df[['#', 'Yiddish', 'English']].to_html(escape=False, index=False), 
-                unsafe_allow_html=True
-            )
+            # DISPLAY AS VERTICAL CARDS (Not a crammed table)
+            for index, row in df.iterrows():
+                with st.container():
+                    c1, c2, c3 = st.columns([1, 4, 4])
+                    c1.caption(row['#'])
+                    c2.text(row['Yiddish'])  # Raw text for Yiddish
+                    c3.markdown(f"**{row['English']}**", unsafe_allow_html=True) # Bold + Breaks for English
+                    st.divider()
             
-            st.divider()
-            
-            # 2. CREATE WORD DOC (Clean)
+            # WORD DOC EXPORT (Table Format)
             doc = Document()
             doc.add_heading(f"Translation ({st.session_state.get('used_model')})", 0)
-            
             table = doc.add_table(rows=1, cols=3)
             table.style = 'Table Grid'
             hdr_cells = table.rows[0].cells
@@ -191,19 +141,16 @@ with col2:
                 row_cells = table.add_row().cells
                 row_cells[0].text = row['#']
                 row_cells[1].text = row['Yiddish']
-                clean_english = row['English_Raw'].replace("~", "\n")
-                row_cells[2].text = clean_english
+                row_cells[2].text = row['English'].replace("<br>", "\n")
 
             bio = io.BytesIO()
             doc.save(bio)
             
             st.download_button(
-                label="Download Formatted Word Doc",
+                label="Download Word Doc",
                 data=bio.getvalue(),
                 file_name="translation.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
         else:
-            # Fallback if table parsing fails (rare)
-            st.warning("Could not format as table. Raw output:")
             st.text(raw_text)
