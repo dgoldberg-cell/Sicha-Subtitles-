@@ -129,8 +129,8 @@ with col2:
             try:
                 genai.configure(api_key=api_key)
                 # Use Gemini 1.5 Flash for speed/cost, or 1.5 Pro for quality
-                model = genai.GenerativeModel(
-                    model_name="gemini-1.5-flash",
+                 = genai.Generative(
+                    model_name="gemini-2.5-flash",
                     system_instruction=system_prompt
                 )
                 with st.spinner("Translating..."):
@@ -153,3 +153,4 @@ with col2:
             file_name="translation.docx",
             mime="application/docx"
         )
+
