@@ -1,48 +1,78 @@
 import streamlit as st
-import subprocess
-import sys
-import time
-
-# --- NUCLEAR FIX: FORCE UPDATE THE BRAIN ---
-# This forces the server to install the newest Google library 
-# right now, ignoring whatever old version is stuck in the cache.
-try:
-    import google.generativeai as genai
-    # Check if version is old, if so, force upgrade
-    if int(genai.__version__.split('.')[1]) < 8:
-        raise ImportError("Old version detected")
-except (ImportError, Exception):
-    print("🔄 Force-Updating Google Library...")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "google-generativeai>=0.8.3"])
-    import google.generativeai as genai
-
+import google.generativeai as genai
 import pandas as pd
 from docx import Document
 import io
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Sicha Translator V40 (Auto-Pilot)", layout="wide")
-st.title("⚡ Sicha Translator (V40 Auto-Pilot)")
+st.set_page_config(page_title="Sicha Translator V42 (Complete)", layout="wide")
+st.title("⚡ Sicha Translator (V42 - Complete)")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
     api_key = st.text_input("Enter NEW Google API Key", type="password")
-    st.caption(f"System Brain Version: {genai.__version__}")
     
-    # --- PROMPT ---
+    # --- THE MASTER V24 PROMPT (RESTORED) ---
     default_prompt = """
 # Role
-You are a master storyteller translating the Lubavitcher Rebbe’s Sichos.
+You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Sichos.
 
-# RULES
-1. **Fidelity:** Translate every thought. Do not summarize.
-2. **Structure:** Vertical list. Short lines (3-7 words).
-3. **Format:** Use `~` for visual line breaks.
-4. **Output Format:** ID | Yiddish | English Subtitle
+# MODULE A: THE "JANITOR" (Source Cleaning)
+* **CRITICAL:** When outputting the Yiddish Source column, you must CLEAN the text.
+* **Remove:** Random symbols (??, *, #), OCR artifacts, and parenthetical interruptions that are not part of the sentence flow.
+* **Retain:** The actual spoken words.
+
+# MODULE B: FIDELITY (The "Zero-Loss" Rule)
+* **CRITICAL:** Do not summarize. Every distinct thought in the Yiddish must have a corresponding English phrase.
+
+# MODULE C: NARRATIVE VOICE & THEOLOGY
+### 1. VOICE ATTRIBUTION
+* **Action:** Insert tags: "**Moses reasoned**, 'If another person...'"
+
+### 2. PHENOMENON OVER LABEL
+* **Action:** Describe effect. "Nimna Hanimnaos" -> "**God, who is Infinite, and therefore contains the finite.**"
+
+### 3. QUOTE CONTEXT
+* **Liturgy:** Literal ("**Hear O Israel...**").
+* **Prooftext:** Meaning ("**Man was born to toil**").
+
+# MODULE D: CULTURAL TRANSLATION
+### 4. CONCEPT OVER ETYMOLOGY
+* *Adam* -> "**Created in God's image.**"
+* *Aleph-Beis mechanics* -> Translate the **concept** the letters represent.
+
+### 5. RELATIONAL TITLES
+* *Der Rebbe* -> "**My father-in-law, the Rebbe.**"
+
+# MODULE E: VISUAL STRUCTURE
+### 6. VERTICAL RHYTHM
+* **Length:** Max 40 chars (3-7 words) per line.
+* **Balance:** Two lines should be visually equal (pyramid/rectangle).
+* **Split:** Use the tilde symbol `~` to indicate a visual line break inside a single subtitle row.
+
+### 7. LOGICAL BRIDGING
+* **Action:** Insert connectors: **"But first," "However."**
+
+# MODULE F: SYNTAX (The Manual)
+### 8. ACTIVE VOICE & POSITIVE PHRASING
+* Convert Passive -> Active.
+* Convert Double Negative -> Positive + Contrast.
+
+# OUTPUT FORMAT RULE (Strict Pipe-List)
+Provide the output as a simple list with 3 columns separated by pipes (|).
+Do NOT use Markdown Table syntax (no dashes ---). Just raw lines.
+
+Format:
+ID | Yiddish Cleaned | English Subtitle
+
+Example:
+001 | (Yiddish Text) | English line one~English line two
+002 | (Yiddish Text) | Next English line
     """
-    with st.expander("Edit Prompt"):
-        system_prompt = st.text_area("Prompt", value=default_prompt, height=200)
+    
+    with st.expander("Edit System Prompt"):
+        system_prompt = st.text_area("Prompt", value=default_prompt, height=400)
 
 # --- MAIN PAGE ---
 col1, col2 = st.columns(2)
@@ -64,85 +94,13 @@ with col2:
             genai.configure(api_key=api_key)
             
             # --- AUTO-PILOT MODEL SELECTION ---
-            # We don't guess the model. We ask Google what is available.
             active_model = None
             try:
                 status_box.info("🔍 Scanning for available models...")
                 available_models = []
-                for m in genai.list_models():
-                    if 'generateContent' in m.supported_generation_methods:
-                        available_models.append(m.name)
+                # Simple check for standard models
+                candidates = ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-pro"]
                 
-                # Priority Logic: Try to find the best one that exists
-                if "models/gemini-1.5-flash" in available_models:
-                    active_model = "gemini-1.5-flash"
-                elif "models/gemini-1.5-pro" in available_models:
-                    active_model = "gemini-1.5-pro"
-                elif "models/gemini-pro" in available_models:
-                    active_model = "gemini-pro"
-                else:
-                    # If nothing matches, take the first one available
-                    if available_models:
-                        active_model = available_models[0].replace("models/", "")
-                
-                if not active_model:
-                    st.error("❌ No models found. Your API Key might be invalid or has no access.")
-                    st.stop()
-                    
-                status_box.info(f"✅ locked onto model: {active_model}")
-                
-            except Exception as e:
-                st.error(f"Connection Error: {e}")
-                st.stop()
-
-            # --- TRANSLATION ---
-            try:
-                model = genai.GenerativeModel(active_model)
-                full_input = f"{system_prompt}\n\n---\n\nINPUT TEXT:\n{yiddish_text}"
-                response = model.generate_content(full_input)
-                
-                st.session_state['result'] = response.text
-                status_box.success("✅ Translation Complete")
-                
-            except Exception as e:
-                status_box.error("❌ Failed during translation.")
-                st.error(f"Error: {e}")
-
-    # --- DISPLAY & EXPORT ---
-    if 'result' in st.session_state:
-        raw_text = st.session_state['result']
-        data = []
-        for line in raw_text.split('\n'):
-            if "|" in line and "ID |" not in line and "---" not in line:
-                parts = line.split('|')
-                if len(parts) >= 3:
-                    data.append({
-                        "#": parts[0].strip(),
-                        "Yiddish": parts[1].strip(),
-                        "English": parts[2].strip().replace("~", "<br>")
-                    })
-        
-        if data:
-            df = pd.DataFrame(data)
-            for idx, row in df.iterrows():
-                with st.container():
-                    c1, c2, c3 = st.columns([1, 4, 4])
-                    c1.caption(row['#'])
-                    c2.text(row['Yiddish'])
-                    c3.markdown(f"**{row['English']}**", unsafe_allow_html=True)
-                    st.divider()
-            
-            # DOCX Export
-            doc = Document()
-            table = doc.add_table(rows=1, cols=3)
-            table.style = 'Table Grid'
-            for idx, row in df.iterrows():
-                cells = table.add_row().cells
-                cells[0].text = row['#']
-                cells[1].text = row['Yiddish']
-                cells[2].text = row['English'].replace("<br>", "\n")
-            bio = io.BytesIO()
-            doc.save(bio)
-            st.download_button("Download DOCX", bio.getvalue(), "translation.docx")
-        else:
-            st.text(raw_text)
+                # We try to instantiate them to see if they work with your key
+                for c in candidates:
+                    try:
