@@ -6,15 +6,33 @@ import time
 import pandas as pd
 
 # --- PAGE SETUP ---
-st.set_page_config(page_title="Sicha Translator V33", layout="wide")
-st.title("⚡ Sicha Translator (English Storyteller)")
+st.set_page_config(page_title="Sicha Translator V36 (Self-Diagnosing)", layout="wide")
+st.title("⚡ Sicha Translator (Storyteller V36)")
+
+# --- CRITICAL: SELF-DIAGNOSIS ---
+try:
+    library_version = genai.__version__
+    major, minor, patch = map(int, library_version.split('.'))
+    
+    # We need at least version 0.8.3 for the new models
+    if minor < 8 and major == 0:
+        st.error(f"🛑 CRITICAL SYSTEM ERROR")
+        st.error(f"Your System Brain is too old: Version {library_version}")
+        st.warning("👉 YOU MUST FIX 'requirements.txt' NOW.")
+        st.info("1. Go to GitHub.\n2. Open 'requirements.txt'.\n3. Delete everything.\n4. Paste this:\n\nstreamlit\ngoogle-generativeai>=0.8.3\npandas\npython-docx")
+        st.stop() # STOP THE APP HERE
+        
+except Exception as e:
+    st.error(f"System Check Failed: {e}")
+
+# --- IF WE PASS THE CHECK, WE LOAD THE APP ---
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
     api_key = st.text_input("Enter Google API Key", type="password")
     st.divider()
-    st.info("ℹ️ **System:** English Only (Storyteller Mode)")
+    st.info(f"✅ System Status: Healthy\nBrain Version: {library_version}")
 
     # --- THE MASTER ENGLISH PROMPT ---
     default_prompt = """
@@ -54,7 +72,6 @@ Example:
         system_prompt = st.text_area("Prompt", value=default_prompt, height=300)
 
 # --- MODEL PRIORITY LIST ---
-# Prioritizing the newest models (which will now work!)
 MODEL_PRIORITY = [
     "gemini-2.0-flash",          
     "gemini-1.5-pro",            
@@ -98,12 +115,12 @@ with col2:
                     status_box.success(f"✅ Success! Used: {model_name}")
                     break 
                 except Exception as e:
-                    # If it fails, print the error to help debug
-                    print(f"Model {model_name} failed: {e}")
-                    time.sleep(0.5)
+                    # PRINT THE EXACT ERROR FOR DEBUGGING
+                    st.warning(f"⚠️ {model_name} Failed. Error: {e}")
+                    time.sleep(1)
 
             if not success:
-                st.error("❌ All models failed. Check your Quota or Requirements.")
+                st.error("❌ CRITICAL FAILURE. Read the yellow warnings above to see why.")
 
     # --- RESULT PROCESSING ---
     if 'result' in st.session_state:
@@ -127,14 +144,13 @@ with col2:
             # DISPLAY AS VERTICAL CARDS (Standard Clean UI)
             for index, row in df.iterrows():
                 with st.container():
-                    # Create a clean card layout using columns
                     c1, c2, c3 = st.columns([1, 4, 4])
                     
                     c1.caption(f"**{row['#']}**")
-                    c2.text(row['Yiddish'])  # Plain text for Yiddish
-                    c3.markdown(f"#### {row['English']}", unsafe_allow_html=True) # Heading size for visibility
+                    c2.text(row['Yiddish'])
+                    c3.markdown(f"#### {row['English']}", unsafe_allow_html=True)
                     
-                    st.divider() # Visual separator
+                    st.divider()
             
             # WORD DOC EXPORT
             doc = Document()
@@ -162,5 +178,4 @@ with col2:
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
         else:
-            # Fallback if parsing fails
             st.text(raw_text)
