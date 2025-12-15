@@ -153,4 +153,94 @@ with col1:
 with col2:
     st.subheader("Output")
     
-    if st.button("Translate Now", type="
+    # --- THIS WAS THE BROKEN LINE ---
+    if st.button("Translate Now", type="primary"):
+        if not api_key:
+            st.error("Missing API Key")
+        elif not yiddish_text:
+            st.warning("No text to translate")
+        else:
+            
+            # --- EXECUTION ---
+            success = False
+            status_box = st.empty()
+            error_log = st.expander("Debug Log", expanded=False)
+            
+            genai.configure(api_key=api_key)
+            
+            try:
+                status_box.info(f"⏳ Processing with {model_choice}...")
+                model = genai.GenerativeModel(model_name=model_choice, system_instruction=system_prompt)
+                response = model.generate_content(yiddish_text)
+                
+                st.session_state['result'] = response.text
+                st.session_state['lang_mode'] = "Hebrew" if is_rtl else "English"
+                success = True
+                status_box.success("Done!")
+                
+            except Exception as e:
+                status_box.error("Failed.")
+                error_log.write(e)
+
+    # --- RENDER RESULTS (JEM CARDS) ---
+    if 'result' in st.session_state:
+        raw_text = st.session_state['result']
+        current_lang = st.session_state.get('lang_mode', 'English')
+        
+        # Parse
+        data = []
+        for line in raw_text.split('\n'):
+            if "|" in line and "ID |" not in line and "---" not in line:
+                parts = line.split('|')
+                if len(parts) >= 3:
+                    data.append({
+                        "#": parts[0].strip(), 
+                        "Yiddish": parts[1].strip(), 
+                        "Translation": parts[2].strip()
+                    })
+        
+        if data:
+            df = pd.DataFrame(data)
+            
+            # SCROLLABLE CONTAINER
+            with st.container():
+                for index, row in df.iterrows():
+                    trans_html = row['Translation'].replace("~", "<br>")
+                    
+                    # DYNAMIC CSS CLASS BASED ON LANGUAGE
+                    text_class = "sub-hebrew" if current_lang == "Hebrew" else "sub-english"
+                    align_style = "text-align: right;" if current_lang == "Hebrew" else "text-align: left;"
+                    
+                    st.markdown(f"""
+                    <div class="sub-card">
+                        <div class="sub-id">{row['#']}</div>
+                        <div class="sub-yiddish" dir="rtl" style="text-align: right;">{row['Yiddish']}</div>
+                        <hr style="border-color: #30363D; margin: 8px 0;">
+                        <div class="{text_class}" style="{align_style}">{trans_html}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # EXPORT BUTTON
+            doc = Document()
+            table = doc.add_table(rows=1, cols=3)
+            table.style = 'Table Grid'
+            hdr = table.rows[0].cells
+            hdr[0].text = '#'
+            hdr[1].text = 'Yiddish'
+            hdr[2].text = current_lang
+            
+            for index, row in df.iterrows():
+                cells = table.add_row().cells
+                cells[0].text = row['#']
+                cells[1].text = row['Yiddish']
+                cells[2].text = row['Translation'].replace("~", "\n")
+
+            bio = io.BytesIO()
+            doc.save(bio)
+            
+            st.download_button(
+                label=f"Download {current_lang} .docx",
+                data=bio.getvalue(),
+                file_name=f"Sicha_Translation_{current_lang}.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
