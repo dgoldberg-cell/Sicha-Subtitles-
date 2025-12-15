@@ -6,15 +6,15 @@ from docx import Document
 import io
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Sicha Translator V45 (Direct Line)", layout="wide")
-st.title("⚡ Sicha Translator (Direct API Mode)")
+st.set_page_config(page_title="Sicha Translator V46 (Compatibility)", layout="wide")
+st.title("⚡ Sicha Translator (V46 - Compatibility Mode)")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
     api_key = st.text_input("Enter NEW Google API Key", type="password")
     
-    st.caption("System: Direct HTTP (Bypassing Python Lib)")
+    st.info("ℹ️ Using Model: gemini-pro (Standard)")
 
     # --- THE MASTER V24 PROMPT ---
     default_prompt = """
@@ -94,22 +94,23 @@ with col2:
             st.warning("Please paste text.")
         else:
             status_box = st.empty()
-            status_box.info("⏳ Sending Raw HTTP Request...")
+            status_box.info("⏳ Sending Request to gemini-pro...")
             
-            # --- DIRECT API CALL (NO LIBRARY) ---
+            # --- DIRECT API CALL (V46) ---
             try:
-                # 1. The Endpoint URL (We talk directly to the web address)
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+                # WE USE 'gemini-pro' (The Standard Model)
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
                 
-                # 2. Construct the Payload manually
+                # OLD SCHOOL TRICK:
+                # Old models don't like separate system instructions.
+                # We combine everything into one big message.
+                combined_input = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
+
                 headers = {'Content-Type': 'application/json'}
                 data = {
                     "contents": [{
-                        "parts": [{"text": f"TASK: Translate the following text:\n\n{yiddish_text}"}]
+                        "parts": [{"text": combined_input}]
                     }],
-                    "systemInstruction": {
-                        "parts": [{"text": system_prompt}]
-                    },
                     "safetySettings": [
                         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -118,21 +119,19 @@ with col2:
                     ]
                 }
                 
-                # 3. Fire the request
                 response = requests.post(url, headers=headers, data=json.dumps(data))
                 
-                # 4. Parse Response
                 if response.status_code == 200:
                     result_json = response.json()
                     try:
-                        # Extract text deep from the JSON structure
                         generated_text = result_json['candidates'][0]['content']['parts'][0]['text']
                         st.session_state['result'] = generated_text
                         status_box.success("✅ Success!")
                     except KeyError:
-                        st.error("Error parsing response. It might be blocked.")
+                        st.error("Model blocked the response (Safety Filters).")
                         st.json(result_json)
                 else:
+                    # If 404 happens here, the key itself is invalid/restricted
                     st.error(f"Error {response.status_code}: {response.text}")
                     
             except Exception as e:
