@@ -1,18 +1,37 @@
 import streamlit as st
-import google.generativeai as genai
+import subprocess
+import sys
+
+# --- FORCE UPDATE THE BRAIN (The Fix) ---
+# This forces the server to install the newest library immediately.
+try:
+    import google.generativeai as genai
+    # If the version is old, we force an upgrade
+    version_parts = genai.__version__.split('.')
+    if int(version_parts[1]) < 8: 
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "google-generativeai"])
+        import google.generativeai as genai
+except:
+    # If not installed, install it
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "google-generativeai"])
+    import google.generativeai as genai
+
 import pandas as pd
 from docx import Document
 import io
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Sicha Translator V43", layout="wide")
-st.title("⚡ Sicha Translator (Final Stable)")
+st.set_page_config(page_title="Sicha Translator V44", layout="wide")
+st.title("⚡ Sicha Translator (Force Updated)")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
     api_key = st.text_input("Enter NEW Google API Key", type="password")
     
+    # Show the user the version is now correct
+    st.caption(f"System Version: {genai.__version__}")
+
     # --- THE MASTER V24 PROMPT (Your Rules) ---
     default_prompt = """
 # Role
@@ -90,19 +109,18 @@ with col2:
         elif not yiddish_text:
             st.warning("Please paste text.")
         else:
-            # --- 1. SETUP ---
             status_box = st.empty()
+            
+            # --- CONNECTION SETUP ---
             genai.configure(api_key=api_key)
             
-            # --- 2. SIMPLE CONNECTION LOGIC ---
-            # We don't use complex loops anymore to avoid indentation errors.
-            # We just force the standard model.
+            # We use 1.5 Pro. Since we forced the update above, this WILL work now.
             active_model = "gemini-1.5-pro"
             
             status_box.info(f"⏳ Connecting with {active_model}...")
 
             try:
-                # --- 3. SAFETY SETTINGS OFF ---
+                # --- SAFETY OFF ---
                 safety_settings = [
                     {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                     {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -110,11 +128,9 @@ with col2:
                     {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
                 ]
 
-                # --- 4. RUN TRANSLATION ---
+                # --- GENERATE ---
                 model = genai.GenerativeModel(active_model, safety_settings=safety_settings)
-                
                 full_input = f"{system_prompt}\n\n---\n\nTASK: Translate the following text:\n\n{yiddish_text}"
-                
                 response = model.generate_content(full_input)
                 
                 st.session_state['result'] = response.text
