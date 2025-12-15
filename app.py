@@ -6,16 +6,14 @@ from docx import Document
 import io
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Sicha Translator V46 (Compatibility)", layout="wide")
-st.title("⚡ Sicha Translator (V46 - Compatibility Mode)")
+st.set_page_config(page_title="Sicha Translator V47 (The Scanner)", layout="wide")
+st.title("⚡ Sicha Translator (Auto-Detect Mode)")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
     api_key = st.text_input("Enter NEW Google API Key", type="password")
     
-    st.info("ℹ️ Using Model: gemini-pro (Standard)")
-
     # --- THE MASTER V24 PROMPT ---
     default_prompt = """
 # Role
@@ -94,16 +92,50 @@ with col2:
             st.warning("Please paste text.")
         else:
             status_box = st.empty()
-            status_box.info("⏳ Sending Request to gemini-pro...")
+            status_box.info("🔍 Scanning for available models...")
             
-            # --- DIRECT API CALL (V46) ---
+            # --- STEP 1: SCAN FOR MODELS (The Fix) ---
+            # We ask Google: "What models do I have?"
+            list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+            valid_model_name = None
+            
             try:
-                # WE USE 'gemini-pro' (The Standard Model)
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+                list_response = requests.get(list_url)
+                if list_response.status_code == 200:
+                    models_data = list_response.json()
+                    # Look for the first model that supports generating content
+                    for m in models_data.get('models', []):
+                        if "generateContent" in m.get('supportedGenerationMethods', []):
+                            # Prefer Flash or Pro if available, but take anything
+                            if "flash" in m['name'] or "pro" in m['name']:
+                                valid_model_name = m['name']
+                                break
+                    
+                    # If no preference found, take the first one
+                    if not valid_model_name and models_data.get('models'):
+                         for m in models_data.get('models', []):
+                            if "generateContent" in m.get('supportedGenerationMethods', []):
+                                valid_model_name = m['name']
+                                break
+                else:
+                    st.error(f"Could not list models. Error: {list_response.text}")
+                    st.stop()
+            except Exception as e:
+                st.error(f"Network Error during scan: {e}")
+                st.stop()
+            
+            if not valid_model_name:
+                st.error("❌ No compatible models found for this API Key.")
+                st.stop()
+
+            # --- STEP 2: TRANSLATE USING FOUND MODEL ---
+            status_box.info(f"✅ Locked onto: {valid_model_name}")
+            
+            try:
+                # Use the scanned name exactly
+                generate_url = f"https://generativelanguage.googleapis.com/v1beta/{valid_model_name}:generateContent?key={api_key}"
                 
-                # OLD SCHOOL TRICK:
-                # Old models don't like separate system instructions.
-                # We combine everything into one big message.
+                # Combine prompt and text (Compatibility Mode)
                 combined_input = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
 
                 headers = {'Content-Type': 'application/json'}
@@ -119,7 +151,7 @@ with col2:
                     ]
                 }
                 
-                response = requests.post(url, headers=headers, data=json.dumps(data))
+                response = requests.post(generate_url, headers=headers, data=json.dumps(data))
                 
                 if response.status_code == 200:
                     result_json = response.json()
@@ -131,8 +163,7 @@ with col2:
                         st.error("Model blocked the response (Safety Filters).")
                         st.json(result_json)
                 else:
-                    # If 404 happens here, the key itself is invalid/restricted
-                    st.error(f"Error {response.status_code}: {response.text}")
+                    st.error(f"Translation Error {response.status_code}: {response.text}")
                     
             except Exception as e:
                 st.error(f"Connection Failed: {e}")
