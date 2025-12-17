@@ -9,15 +9,15 @@ import time
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="JEM English Subtitle Generator", layout="wide")
 
-# --- SIDEBAR (WITH LOGO) ---
+# --- SIDEBAR (WITH NEW JEM AI LOGO) ---
 with st.sidebar:
-    # JEM LOGO
-    st.image("https://jemcentral.org/wp-content/uploads/2018/11/jem-logo.gif", width=150)
+    # UPDATED LOGO
+    st.image("https://cdn.prod.website-files.com/67dd48176b6e7b21cf6cc9bc/67ecd01b1392af3e91a89ee2_d68e8bf608547d781d6eaf13a23203df_jem%20ai%20hero.svg", use_column_width=True)
     
     st.header("Settings")
     api_key = st.text_input("Enter Google API Key", type="password")
     
-    # --- THE V54 PROMPT ---
+    # --- THE V54 PROMPT (UNTOUCHED) ---
     default_prompt = """
 # Role
 You are a master subtitler adapting the Lubavitcher Rebbe’s Sichos. Your goal is to produce **narrative, high-impact English** that captures the speaker's voice while adhering to strict video-subtitle standards.
