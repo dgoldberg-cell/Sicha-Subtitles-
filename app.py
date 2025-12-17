@@ -7,15 +7,15 @@ import io
 import time
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Sicha Translator V52 (Strict Subtitles)", layout="wide")
-st.title("⚡ Sicha Translator (V52 - Strict 1st Person)")
+st.set_page_config(page_title="Sicha Translator V53 (Layout Fix)", layout="wide")
+st.title("⚡ Sicha Translator (V53 - Layout Fix)")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
     api_key = st.text_input("Enter Google API Key", type="password")
     
-    # --- THE FULL V23 PROMPT + NEW "NO NARRATOR" RULE ---
+    # --- THE FULL V23 PROMPT (Restored & Protected) ---
     default_prompt = """
 # Role
 You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Sichos. Your goal is to produce **narrative, high-impact English** that focuses on the *character's voice* and *intended meaning* while adhering to strict video-subtitle standards.
@@ -165,4 +165,87 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader
+    # REPLACED st.subheader WITH st.markdown TO FIX GLITCH
+    st.markdown("### Input") 
+    yiddish_text = st.text_area("Paste text here...", height=600, key="input_area")
+
+with col2:
+    # REPLACED st.subheader WITH st.markdown TO FIX GLITCH
+    st.markdown("### Output")
+    
+    if st.button("Translate", type="primary"):
+        if not api_key:
+            st.error("Please enter your API Key.")
+        elif not yiddish_text:
+            st.warning("Please paste text.")
+        else:
+            status_box = st.empty()
+            
+            # Use 2.5 Flash as primary
+            target_model = "models/gemini-2.5-flash" 
+            
+            combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
+
+            status_box.info(f"🚀 Processing with V23 Rules + No Narrator (Model: {target_model})...")
+            
+            success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
+            
+            if success:
+                status_box.success("✅ Connected & Translated!")
+                st.session_state['result'] = result
+            else:
+                if result == "NOT_FOUND":
+                     status_box.warning("2.5 Flash not found. Trying backup...")
+                     success_bk, result_bk = attempt_translation_with_retries("models/gemini-1.5-flash", api_key, combined_prompt)
+                     if success_bk:
+                         st.session_state['result'] = result_bk
+                         status_box.success("✅ Connected (via Backup)")
+                     else:
+                         status_box.error(f"❌ Failed: {result}")
+                else:
+                    status_box.error(f"❌ Failed: {result}")
+
+    # --- RESULT DISPLAY ---
+    if 'result' in st.session_state:
+        raw_text = st.session_state['result']
+        
+        # Parse
+        data = []
+        for line in raw_text.split('\n'):
+            if "|" in line and "ID |" not in line and "---" not in line:
+                parts = line.split('|')
+                if len(parts) >= 3:
+                    data.append({
+                        "#": parts[0].strip(),
+                        "Yiddish": parts[1].strip(),
+                        "English": parts[2].strip().replace("~", "<br>")
+                    })
+        
+        # Display Cards
+        if data:
+            df = pd.DataFrame(data)
+            for idx, row in df.iterrows():
+                with st.container():
+                    c1, c2, c3 = st.columns([1, 4, 4])
+                    c1.caption(row['#'])
+                    c2.text(row['Yiddish'])
+                    c3.markdown(f"**{row['English']}**", unsafe_allow_html=True)
+                    st.divider()
+            
+            # DOCX Export
+            doc = Document()
+            table = doc.add_table(rows=1, cols=3)
+            table.style = 'Table Grid'
+            for idx, row in df.iterrows():
+                cells = table.add_row().cells
+                cells[0].text = row['#']
+                cells[1].text = row['Yiddish']
+                cells[2].text = row['English'].replace("<br>", "\n")
+            
+            bio = io.BytesIO()
+            doc.save(bio)
+            st.download_button("Download DOCX", bio.getvalue(), "translation.docx")
+        
+        # Fallback View
+        with st.expander("View Raw Output"):
+            st.text(raw_text)
