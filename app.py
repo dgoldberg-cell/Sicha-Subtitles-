@@ -7,61 +7,101 @@ import io
 import time
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Sicha Translator V49 (Retry Logic)", layout="wide")
-st.title("⚡ Sicha Translator (V49 - The Battering Ram)")
+st.set_page_config(page_title="Sicha Translator V51 (Complete V23)", layout="wide")
+st.title("⚡ Sicha Translator (V51 - Complete V23 Restoration)")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
     api_key = st.text_input("Enter Google API Key", type="password")
     
-    # --- THE MASTER V24 PROMPT ---
+    # --- THE FULL V23 PROMPT (WITH EXAMPLES) ---
     default_prompt = """
 # Role
-You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Sichos.
+You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Sichos. Your goal is to produce **narrative, high-impact English** that focuses on the *character's voice* and *intended meaning* while adhering to strict video-subtitle standards.
 
-# MODULE A: THE "JANITOR" (Source Cleaning)
-* **CRITICAL:** When outputting the Yiddish Source column, you must CLEAN the text.
-* **Remove:** Random symbols (??, *, #), OCR artifacts.
-* **Retain:** The actual spoken words.
-
-# MODULE B: FIDELITY (The "Zero-Loss" Rule)
+# MODULE A: FIDELITY (The "Zero-Loss" Rule)
 * **CRITICAL:** Do not summarize. Every distinct thought in the Yiddish must have a corresponding English phrase.
+* **Action:** Change structure for flow, but never remove content.
 
-# MODULE C: NARRATIVE VOICE & THEOLOGY
+# MODULE B: NARRATIVE VOICE & THEOLOGY
 ### 1. VOICE ATTRIBUTION
-* **Action:** Insert tags: "**Moses reasoned**, 'If another person...'"
+* **Action:** Insert tags to describe internal thought processes.
+* *Input:* "If the other person..." -> *Output:* "**Moses reasoned**, 'If another person...'"
 
 ### 2. PHENOMENON OVER LABEL
-* **Action:** Describe effect. "Nimna Hanimnaos" -> "**God, who is Infinite, and therefore contains the finite.**"
+* **Action:** Describe the effect/meaning, not the technical label.
+* *Input:* "Nimna Hanimnaos" -> *Output:* "**God, who is Infinite, and therefore contains the finite.**"
 
-### 3. QUOTE CONTEXT
-* **Liturgy:** Literal ("**Hear O Israel...**").
-* **Prooftext:** Meaning ("**Man was born to toil**").
+### 3. THE "QUOTE CONTEXT" RULE
+* **Liturgy:** Translate objects of study literally ("**Hear O Israel...**").
+* **Prooftext:** Translate the point of the quote ("**Man was born to toil**").
+* **Integration:** Weave quotes into grammar; avoid colons.
 
-# MODULE D: CULTURAL TRANSLATION
-### 4. CONCEPT OVER ETYMOLOGY
-* *Adam* -> "**Created in God's image.**"
-* *Aleph-Beis mechanics* -> Translate the **concept** the letters represent.
+# MODULE C: CULTURAL & LINGUISTIC TRANSLATION
+### 4. CONCEPT OVER ETYMOLOGY (The "Adam" Rule)
+* **Action:** Translate the *implication*. *Adam* -> "**Created in God's image.**"
 
-### 5. RELATIONAL TITLES
-* *Der Rebbe* -> "**My father-in-law, the Rebbe.**"
+### 5. MECHANICS VS. MEANING
+* **Action:** If text uses mechanics (Gematria/Letters) to explain a concept, translate the **concept**.
+* *Input:* "Ches is 7 heavens..." -> *Output:* "**Since a child sees the heavens and earth...**"
 
-# MODULE E: VISUAL STRUCTURE
-### 6. VERTICAL RHYTHM
-* **Length:** Max 40 chars (3-7 words) per line.
-* **Balance:** Two lines should be visually equal.
-* **Split:** Use the tilde symbol `~` to indicate a visual line break inside a single subtitle row.
+### 6. RELATIONAL TITLES
+* **Action:** *Der Rebbe (Nishmaso Eden)* -> "**My father-in-law, the Rebbe.**"
 
-### 7. LOGICAL BRIDGING
-* **Action:** Insert connectors: **"But first," "However."**
+# MODULE D: VISUAL STRUCTURE & RHYTHM
+### 7. VERTICAL RHYTHM & BALANCE
+* **Logic:** Subtitles must be readable in seconds.
+* **Action:**
+    * **Length:** Max 40 characters (approx 3-7 words) per line.
+    * **Balance:** If using 2 lines, keep them roughly equal in length.
+    * **Grammatical Breaks:** Never break a line between an adjective and noun, or preposition and object.
+    * **Split:** Use the tilde symbol `~` to indicate a visual line break inside a single subtitle row.
 
-# MODULE F: SYNTAX
-### 8. ACTIVE VOICE & POSITIVE PHRASING
-* Convert Passive -> Active.
-* Convert Double Negative -> Positive + Contrast.
+### 8. LOGICAL BRIDGING
+* **Action:** Insert connectors: **"But first," "However," "Simply put."**
 
-# OUTPUT FORMAT RULE (Strict Pipe-List)
+# MODULE E: SYNTAX & BREVITY (The "Manual" Rules)
+### 9. ACTIVE VOICE CONVERSION
+* **Logic:** Passive voice wastes space and time.
+* **Action:** Convert to Active.
+    * *Input:* "It is believed by many..." -> *Output:* "**Many believe...**"
+
+### 10. POSITIVE PHRASING
+* **Logic:** Negative phrasing ("Place we hadn't been") is wordy.
+* **Action:** Convert to Positive ("**A new place**").
+
+### 11. THE DOUBLE-NEGATIVE FIX
+* **Logic:** Double negatives ("Not only will they not disturb") are confusing on screen.
+* **Action:** Flip to Positive + Contrast.
+    * *Input:* "Not only will they not disturb..." -> *Output:* "**The government will not disturb; / on the contrary, it will help.**"
+
+### 12. INTRO REMOVAL
+* **Action:** Remove conversational filler.
+    * *Input:* "I would like to know if you are coming." -> *Output:* "**Are you coming?**"
+
+# Few-Shot Examples (V23 Compliant)
+
+### Example A: Brevity & Double Negatives
+*Input:*
+ניט נאָר וואָס ס'איז ניט קיין שטער, נאָר די רעגירונג העלפט
+*Output:*
+010 | ניט נאָר וואָס ס'איז ניט קיין שטער | The government will not disturb;~on the contrary, it will help.
+
+### Example B: Active Voice & Visual Balance
+*Input:*
+ס'איז דאָך ידוע דער וואָרט פון דעם רבי'ן נשמתן עדן
+*Output:*
+025 | ס'איז דאָך ידוע דער וואָרט פון דעם רבי'ן נשמתן עדן | **My father-in-law, the Rebbe,**~taught the following:
+
+### Example C: Mechanics vs. Meaning & Integration
+*Input:*
+דער חי"ת איז דאָס די ז' רקיעים... זאגט אים תורת אמת אז "היום" איז דאס "לעשותם"
+*Output:*
+049 | דער חי"ת איז דאָס די ז' רקיעים... | Since a child can already~see the sky and earth,
+050 | זאגט אים תורת אמת אז "היום" איז דאס "לעשותם" | the Torah of Truth informs him~that this world was created for "toil."
+
+# TECHNICAL OUTPUT FORMAT (Required for App)
 Provide the output as a simple list with 3 columns separated by pipes (|).
 Do NOT use Markdown Table syntax. Just raw lines.
 
@@ -76,11 +116,8 @@ Example:
     with st.expander("Edit System Prompt"):
         system_prompt = st.text_area("Prompt", value=default_prompt, height=400)
 
-# --- RETRY FUNCTION ---
+# --- RETRY FUNCTION (The "Battering Ram") ---
 def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retries=5):
-    """
-    Tries to translate. If 503 (Overloaded) occurs, it waits and tries again.
-    """
     url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={api_key}"
     
     headers = {'Content-Type': 'application/json'}
@@ -99,23 +136,18 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
             response = requests.post(url, headers=headers, data=json.dumps(data))
             
             if response.status_code == 200:
-                # Success!
                 result_json = response.json()
                 try:
                     text = result_json['candidates'][0]['content']['parts'][0]['text']
                     return True, text
                 except KeyError:
                     return False, f"Parsed JSON but found no text: {result_json}"
-            
             elif response.status_code == 503:
-                # OVERLOADED - This is where we fight back
-                st.toast(f"⚠️ Server Busy (Attempt {attempt+1}/{max_retries}). Retrying in 3s...", icon="⏳")
-                time.sleep(3) # Wait 3 seconds
-                continue # Try loop again
-                
+                st.toast(f"⚠️ Server Busy (Attempt {attempt+1}/{max_retries}). Retrying...", icon="⏳")
+                time.sleep(3)
+                continue
             elif response.status_code == 404:
-                return False, "NOT_FOUND" # Don't retry, it doesn't exist
-            
+                return False, "NOT_FOUND"
             else:
                 return False, f"Error {response.status_code}: {response.text}"
                 
@@ -142,29 +174,21 @@ with col2:
         else:
             status_box = st.empty()
             
-            # --- STRATEGY: SCAN & HAMMER ---
-            
-            # 1. First, we check if 2.5 Flash exists (since we know that's the one you have)
-            # or if we need to find something else.
-            status_box.info("🔍 Identifying best model...")
-            
-            # We hardcode the one we know you have access to, even if it's busy.
+            # Use 2.5 Flash as primary
             target_model = "models/gemini-2.5-flash" 
             
             combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
 
-            status_box.info(f"🔨 Hammering {target_model} (Auto-Retry Enabled)...")
+            status_box.info(f"🚀 Processing with V23 Rules + Examples (Model: {target_model})...")
             
             success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
             
             if success:
-                status_box.success("✅ Connected!")
+                status_box.success("✅ Connected & Translated!")
                 st.session_state['result'] = result
             else:
                 if result == "NOT_FOUND":
-                     # Fallback: If 2.5 is missing, scan for ANYTHING
-                     status_box.warning("2.5 Flash not found. Scanning for ANY available model...")
-                     # (Simple fallback to 1.5 flash just in case)
+                     status_box.warning("2.5 Flash not found. Trying backup...")
                      success_bk, result_bk = attempt_translation_with_retries("models/gemini-1.5-flash", api_key, combined_prompt)
                      if success_bk:
                          st.session_state['result'] = result_bk
