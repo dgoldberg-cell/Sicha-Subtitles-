@@ -4,16 +4,18 @@ import json
 import pandas as pd
 from docx import Document
 import io
+import time
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Sicha Translator V47 (The Scanner)", layout="wide")
-st.title("⚡ Sicha Translator (Auto-Detect Mode)")
+st.set_page_config(page_title="Sicha Translator V48 (Auto-Backup)", layout="wide")
+st.title("⚡ Sicha Translator (V48 - The Relay System)")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
     api_key = st.text_input("Enter NEW Google API Key", type="password")
-    
+    st.caption("System: Direct API + Auto-Fallback Logic")
+
     # --- THE MASTER V24 PROMPT ---
     default_prompt = """
 # Role
@@ -75,6 +77,42 @@ Example:
     with st.expander("Edit System Prompt"):
         system_prompt = st.text_area("Prompt", value=default_prompt, height=400)
 
+# --- FUNCTIONS ---
+def try_model(model_name, api_key, full_prompt):
+    """Tries to translate using a specific model. Returns (Success, Text/Error)."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={api_key}"
+    
+    headers = {'Content-Type': 'application/json'}
+    data = {
+        "contents": [{"parts": [{"text": full_prompt}]}],
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ]
+    }
+    
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(data))
+        
+        if response.status_code == 200:
+            result_json = response.json()
+            try:
+                text = result_json['candidates'][0]['content']['parts'][0]['text']
+                return True, text
+            except KeyError:
+                return False, f"Parsed JSON but found no text (Safety Block?): {result_json}"
+        elif response.status_code == 503:
+            return False, "OVERLOADED"
+        elif response.status_code == 404:
+            return False, "NOT_FOUND"
+        else:
+            return False, f"Error {response.status_code}: {response.text}"
+            
+    except Exception as e:
+        return False, str(e)
+
 # --- MAIN PAGE ---
 col1, col2 = st.columns(2)
 
@@ -92,81 +130,48 @@ with col2:
             st.warning("Please paste text.")
         else:
             status_box = st.empty()
-            status_box.info("🔍 Scanning for available models...")
             
-            # --- STEP 1: SCAN FOR MODELS (The Fix) ---
-            # We ask Google: "What models do I have?"
-            list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-            valid_model_name = None
+            # --- THE RELAY RACE ---
+            # We list models in order of preference.
+            # 1. Flash 1.5 (Fastest, Stable)
+            # 2. Pro 1.5 (Smartest)
+            # 3. Flash 2.5 (Newest, but overloaded)
+            # 4. Gemini Pro (Old Reliable)
             
-            try:
-                list_response = requests.get(list_url)
-                if list_response.status_code == 200:
-                    models_data = list_response.json()
-                    # Look for the first model that supports generating content
-                    for m in models_data.get('models', []):
-                        if "generateContent" in m.get('supportedGenerationMethods', []):
-                            # Prefer Flash or Pro if available, but take anything
-                            if "flash" in m['name'] or "pro" in m['name']:
-                                valid_model_name = m['name']
-                                break
-                    
-                    # If no preference found, take the first one
-                    if not valid_model_name and models_data.get('models'):
-                         for m in models_data.get('models', []):
-                            if "generateContent" in m.get('supportedGenerationMethods', []):
-                                valid_model_name = m['name']
-                                break
-                else:
-                    st.error(f"Could not list models. Error: {list_response.text}")
-                    st.stop()
-            except Exception as e:
-                st.error(f"Network Error during scan: {e}")
-                st.stop()
+            # Note: We prioritize 1.5 Flash now because 2.5 is crashing.
+            candidate_models = [
+                "models/gemini-1.5-flash",
+                "models/gemini-1.5-pro",
+                "models/gemini-2.5-flash",
+                "models/gemini-pro"
+            ]
             
-            if not valid_model_name:
-                st.error("❌ No compatible models found for this API Key.")
-                st.stop()
+            success = False
+            final_text = ""
+            
+            combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
 
-            # --- STEP 2: TRANSLATE USING FOUND MODEL ---
-            status_box.info(f"✅ Locked onto: {valid_model_name}")
-            
-            try:
-                # Use the scanned name exactly
-                generate_url = f"https://generativelanguage.googleapis.com/v1beta/{valid_model_name}:generateContent?key={api_key}"
+            for model in candidate_models:
+                status_box.info(f"🔄 Trying model: {model}...")
+                is_ok, result = try_model(model, api_key, combined_prompt)
                 
-                # Combine prompt and text (Compatibility Mode)
-                combined_input = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
-
-                headers = {'Content-Type': 'application/json'}
-                data = {
-                    "contents": [{
-                        "parts": [{"text": combined_input}]
-                    }],
-                    "safetySettings": [
-                        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-                    ]
-                }
-                
-                response = requests.post(generate_url, headers=headers, data=json.dumps(data))
-                
-                if response.status_code == 200:
-                    result_json = response.json()
-                    try:
-                        generated_text = result_json['candidates'][0]['content']['parts'][0]['text']
-                        st.session_state['result'] = generated_text
-                        status_box.success("✅ Success!")
-                    except KeyError:
-                        st.error("Model blocked the response (Safety Filters).")
-                        st.json(result_json)
+                if is_ok:
+                    status_box.success(f"✅ Success using {model}!")
+                    st.session_state['result'] = result
+                    success = True
+                    break # Stop the loop, we won!
                 else:
-                    st.error(f"Translation Error {response.status_code}: {response.text}")
-                    
-            except Exception as e:
-                st.error(f"Connection Failed: {e}")
+                    # If it failed, show why and continue loop
+                    if result == "OVERLOADED":
+                        st.warning(f"⚠️ {model} is overloaded. Switching to backup...")
+                    elif result == "NOT_FOUND":
+                        st.warning(f"⚠️ {model} not found for this key. Switching...")
+                    else:
+                        st.warning(f"⚠️ {model} failed ({result}). Switching...")
+                    time.sleep(1) # Brief pause before next try
+
+            if not success:
+                status_box.error("❌ All models failed. Please check your API Key or try again later.")
 
     # --- RESULT DISPLAY ---
     if 'result' in st.session_state:
