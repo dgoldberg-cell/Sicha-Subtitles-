@@ -7,15 +7,17 @@ import io
 import time
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Sicha Translator V54 (Aggressive Segmentation)", layout="wide")
-st.title("⚡ Sicha Translator (V54 - Aggressive Segmentation)")
+st.set_page_config(page_title="JEM English Subtitle Generator", layout="wide")
 
-# --- SIDEBAR ---
+# --- SIDEBAR (WITH LOGO) ---
 with st.sidebar:
+    # JEM LOGO
+    st.image("https://jemcentral.org/wp-content/uploads/2018/11/jem-logo.gif", width=150)
+    
     st.header("Settings")
     api_key = st.text_input("Enter Google API Key", type="password")
     
-    # --- THE NEW V54 PROMPT (Your Exact Specs) ---
+    # --- THE V54 PROMPT ---
     default_prompt = """
 # Role
 You are a master subtitler adapting the Lubavitcher Rebbe’s Sichos. Your goal is to produce **narrative, high-impact English** that captures the speaker's voice while adhering to strict video-subtitle standards.
@@ -99,10 +101,9 @@ ID | Yiddish Snippet | English Subtitle
     with st.expander("Edit System Prompt"):
         system_prompt = st.text_area("Prompt", value=default_prompt, height=400)
 
-# --- RETRY FUNCTION (The "Battering Ram") ---
+# --- RETRY FUNCTION ---
 def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retries=5):
     url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={api_key}"
-    
     headers = {'Content-Type': 'application/json'}
     data = {
         "contents": [{"parts": [{"text": full_prompt}]}],
@@ -117,7 +118,6 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
     for attempt in range(max_retries):
         try:
             response = requests.post(url, headers=headers, data=json.dumps(data))
-            
             if response.status_code == 200:
                 result_json = response.json()
                 try:
@@ -133,13 +133,13 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
                 return False, "NOT_FOUND"
             else:
                 return False, f"Error {response.status_code}: {response.text}"
-                
         except Exception as e:
             return False, str(e)
-    
     return False, "MAX_RETRIES_EXCEEDED"
 
 # --- MAIN PAGE ---
+st.title("JEM English Subtitle Generator For Sichos")
+
 col1, col2 = st.columns(2)
 
 with col1:
@@ -156,13 +156,10 @@ with col2:
             st.warning("Please paste text.")
         else:
             status_box = st.empty()
-            
-            # Use 2.5 Flash as primary
             target_model = "models/gemini-2.5-flash" 
-            
             combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
 
-            status_box.info(f"🚀 Processing with V54 Rules (Model: {target_model})...")
+            status_box.info(f"🚀 Processing (Model: {target_model})...")
             
             success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
             
