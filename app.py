@@ -7,15 +7,14 @@ import io
 import time
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Sicha Translator V48 (Auto-Backup)", layout="wide")
-st.title("⚡ Sicha Translator (V48 - The Relay System)")
+st.set_page_config(page_title="Sicha Translator V49 (Retry Logic)", layout="wide")
+st.title("⚡ Sicha Translator (V49 - The Battering Ram)")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
-    api_key = st.text_input("Enter NEW Google API Key", type="password")
-    st.caption("System: Direct API + Auto-Fallback Logic")
-
+    api_key = st.text_input("Enter Google API Key", type="password")
+    
     # --- THE MASTER V24 PROMPT ---
     default_prompt = """
 # Role
@@ -77,9 +76,11 @@ Example:
     with st.expander("Edit System Prompt"):
         system_prompt = st.text_area("Prompt", value=default_prompt, height=400)
 
-# --- FUNCTIONS ---
-def try_model(model_name, api_key, full_prompt):
-    """Tries to translate using a specific model. Returns (Success, Text/Error)."""
+# --- RETRY FUNCTION ---
+def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retries=5):
+    """
+    Tries to translate. If 503 (Overloaded) occurs, it waits and tries again.
+    """
     url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={api_key}"
     
     headers = {'Content-Type': 'application/json'}
@@ -93,25 +94,35 @@ def try_model(model_name, api_key, full_prompt):
         ]
     }
     
-    try:
-        response = requests.post(url, headers=headers, data=json.dumps(data))
-        
-        if response.status_code == 200:
-            result_json = response.json()
-            try:
-                text = result_json['candidates'][0]['content']['parts'][0]['text']
-                return True, text
-            except KeyError:
-                return False, f"Parsed JSON but found no text (Safety Block?): {result_json}"
-        elif response.status_code == 503:
-            return False, "OVERLOADED"
-        elif response.status_code == 404:
-            return False, "NOT_FOUND"
-        else:
-            return False, f"Error {response.status_code}: {response.text}"
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(url, headers=headers, data=json.dumps(data))
             
-    except Exception as e:
-        return False, str(e)
+            if response.status_code == 200:
+                # Success!
+                result_json = response.json()
+                try:
+                    text = result_json['candidates'][0]['content']['parts'][0]['text']
+                    return True, text
+                except KeyError:
+                    return False, f"Parsed JSON but found no text: {result_json}"
+            
+            elif response.status_code == 503:
+                # OVERLOADED - This is where we fight back
+                st.toast(f"⚠️ Server Busy (Attempt {attempt+1}/{max_retries}). Retrying in 3s...", icon="⏳")
+                time.sleep(3) # Wait 3 seconds
+                continue # Try loop again
+                
+            elif response.status_code == 404:
+                return False, "NOT_FOUND" # Don't retry, it doesn't exist
+            
+            else:
+                return False, f"Error {response.status_code}: {response.text}"
+                
+        except Exception as e:
+            return False, str(e)
+    
+    return False, "MAX_RETRIES_EXCEEDED"
 
 # --- MAIN PAGE ---
 col1, col2 = st.columns(2)
@@ -131,47 +142,37 @@ with col2:
         else:
             status_box = st.empty()
             
-            # --- THE RELAY RACE ---
-            # We list models in order of preference.
-            # 1. Flash 1.5 (Fastest, Stable)
-            # 2. Pro 1.5 (Smartest)
-            # 3. Flash 2.5 (Newest, but overloaded)
-            # 4. Gemini Pro (Old Reliable)
+            # --- STRATEGY: SCAN & HAMMER ---
             
-            # Note: We prioritize 1.5 Flash now because 2.5 is crashing.
-            candidate_models = [
-                "models/gemini-1.5-flash",
-                "models/gemini-1.5-pro",
-                "models/gemini-2.5-flash",
-                "models/gemini-pro"
-            ]
+            # 1. First, we check if 2.5 Flash exists (since we know that's the one you have)
+            # or if we need to find something else.
+            status_box.info("🔍 Identifying best model...")
             
-            success = False
-            final_text = ""
+            # We hardcode the one we know you have access to, even if it's busy.
+            target_model = "models/gemini-2.5-flash" 
             
             combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
 
-            for model in candidate_models:
-                status_box.info(f"🔄 Trying model: {model}...")
-                is_ok, result = try_model(model, api_key, combined_prompt)
-                
-                if is_ok:
-                    status_box.success(f"✅ Success using {model}!")
-                    st.session_state['result'] = result
-                    success = True
-                    break # Stop the loop, we won!
+            status_box.info(f"🔨 Hammering {target_model} (Auto-Retry Enabled)...")
+            
+            success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
+            
+            if success:
+                status_box.success("✅ Connected!")
+                st.session_state['result'] = result
+            else:
+                if result == "NOT_FOUND":
+                     # Fallback: If 2.5 is missing, scan for ANYTHING
+                     status_box.warning("2.5 Flash not found. Scanning for ANY available model...")
+                     # (Simple fallback to 1.5 flash just in case)
+                     success_bk, result_bk = attempt_translation_with_retries("models/gemini-1.5-flash", api_key, combined_prompt)
+                     if success_bk:
+                         st.session_state['result'] = result_bk
+                         status_box.success("✅ Connected (via Backup)")
+                     else:
+                         status_box.error(f"❌ Failed: {result}")
                 else:
-                    # If it failed, show why and continue loop
-                    if result == "OVERLOADED":
-                        st.warning(f"⚠️ {model} is overloaded. Switching to backup...")
-                    elif result == "NOT_FOUND":
-                        st.warning(f"⚠️ {model} not found for this key. Switching...")
-                    else:
-                        st.warning(f"⚠️ {model} failed ({result}). Switching...")
-                    time.sleep(1) # Brief pause before next try
-
-            if not success:
-                status_box.error("❌ All models failed. Please check your API Key or try again later.")
+                    status_box.error(f"❌ Failed: {result}")
 
     # --- RESULT DISPLAY ---
     if 'result' in st.session_state:
