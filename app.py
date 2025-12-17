@@ -7,15 +7,15 @@ import io
 import time
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Sicha Translator V51 (Complete V23)", layout="wide")
-st.title("⚡ Sicha Translator (V51 - Complete V23 Restoration)")
+st.set_page_config(page_title="Sicha Translator V52 (Strict Subtitles)", layout="wide")
+st.title("⚡ Sicha Translator (V52 - Strict 1st Person)")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
     api_key = st.text_input("Enter Google API Key", type="password")
     
-    # --- THE FULL V23 PROMPT (WITH EXAMPLES) ---
+    # --- THE FULL V23 PROMPT + NEW "NO NARRATOR" RULE ---
     default_prompt = """
 # Role
 You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Sichos. Your goal is to produce **narrative, high-impact English** that focuses on the *character's voice* and *intended meaning* while adhering to strict video-subtitle standards.
@@ -26,7 +26,7 @@ You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Si
 
 # MODULE B: NARRATIVE VOICE & THEOLOGY
 ### 1. VOICE ATTRIBUTION
-* **Action:** Insert tags to describe internal thought processes.
+* **Action:** Insert tags to describe internal thought processes of characters *in the story*, not the speaker.
 * *Input:* "If the other person..." -> *Output:* "**Moses reasoned**, 'If another person...'"
 
 ### 2. PHENOMENON OVER LABEL
@@ -38,19 +38,24 @@ You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Si
 * **Prooftext:** Translate the point of the quote ("**Man was born to toil**").
 * **Integration:** Weave quotes into grammar; avoid colons.
 
+### 4. SUBTITLE REALISM (NO NARRATOR)
+* **CRITICAL:** These are video subtitles of the speaker. Never describe what the speaker is doing.
+* **FORBIDDEN:** "The Rebbe explains," "He draws a parallel," "The speaker continues."
+* **ACTION:** Translate ONLY what is said. Stay strictly in the 1st person (Direct Speech).
+
 # MODULE C: CULTURAL & LINGUISTIC TRANSLATION
-### 4. CONCEPT OVER ETYMOLOGY (The "Adam" Rule)
+### 5. CONCEPT OVER ETYMOLOGY (The "Adam" Rule)
 * **Action:** Translate the *implication*. *Adam* -> "**Created in God's image.**"
 
-### 5. MECHANICS VS. MEANING
+### 6. MECHANICS VS. MEANING
 * **Action:** If text uses mechanics (Gematria/Letters) to explain a concept, translate the **concept**.
 * *Input:* "Ches is 7 heavens..." -> *Output:* "**Since a child sees the heavens and earth...**"
 
-### 6. RELATIONAL TITLES
+### 7. RELATIONAL TITLES
 * **Action:** *Der Rebbe (Nishmaso Eden)* -> "**My father-in-law, the Rebbe.**"
 
 # MODULE D: VISUAL STRUCTURE & RHYTHM
-### 7. VERTICAL RHYTHM & BALANCE
+### 8. VERTICAL RHYTHM & BALANCE
 * **Logic:** Subtitles must be readable in seconds.
 * **Action:**
     * **Length:** Max 40 characters (approx 3-7 words) per line.
@@ -58,25 +63,25 @@ You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Si
     * **Grammatical Breaks:** Never break a line between an adjective and noun, or preposition and object.
     * **Split:** Use the tilde symbol `~` to indicate a visual line break inside a single subtitle row.
 
-### 8. LOGICAL BRIDGING
+### 9. LOGICAL BRIDGING
 * **Action:** Insert connectors: **"But first," "However," "Simply put."**
 
 # MODULE E: SYNTAX & BREVITY (The "Manual" Rules)
-### 9. ACTIVE VOICE CONVERSION
+### 10. ACTIVE VOICE CONVERSION
 * **Logic:** Passive voice wastes space and time.
 * **Action:** Convert to Active.
     * *Input:* "It is believed by many..." -> *Output:* "**Many believe...**"
 
-### 10. POSITIVE PHRASING
+### 11. POSITIVE PHRASING
 * **Logic:** Negative phrasing ("Place we hadn't been") is wordy.
 * **Action:** Convert to Positive ("**A new place**").
 
-### 11. THE DOUBLE-NEGATIVE FIX
+### 12. THE DOUBLE-NEGATIVE FIX
 * **Logic:** Double negatives ("Not only will they not disturb") are confusing on screen.
 * **Action:** Flip to Positive + Contrast.
     * *Input:* "Not only will they not disturb..." -> *Output:* "**The government will not disturb; / on the contrary, it will help.**"
 
-### 12. INTRO REMOVAL
+### 13. INTRO REMOVAL
 * **Action:** Remove conversational filler.
     * *Input:* "I would like to know if you are coming." -> *Output:* "**Are you coming?**"
 
@@ -160,85 +165,4 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
 col1, col2 = st.columns(2)
 
 with col1:
-    st.subheader("Input")
-    yiddish_text = st.text_area("Paste text here...", height=600)
-
-with col2:
-    st.subheader("Output")
-    
-    if st.button("Translate", type="primary"):
-        if not api_key:
-            st.error("Please enter your API Key.")
-        elif not yiddish_text:
-            st.warning("Please paste text.")
-        else:
-            status_box = st.empty()
-            
-            # Use 2.5 Flash as primary
-            target_model = "models/gemini-2.5-flash" 
-            
-            combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
-
-            status_box.info(f"🚀 Processing with V23 Rules + Examples (Model: {target_model})...")
-            
-            success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
-            
-            if success:
-                status_box.success("✅ Connected & Translated!")
-                st.session_state['result'] = result
-            else:
-                if result == "NOT_FOUND":
-                     status_box.warning("2.5 Flash not found. Trying backup...")
-                     success_bk, result_bk = attempt_translation_with_retries("models/gemini-1.5-flash", api_key, combined_prompt)
-                     if success_bk:
-                         st.session_state['result'] = result_bk
-                         status_box.success("✅ Connected (via Backup)")
-                     else:
-                         status_box.error(f"❌ Failed: {result}")
-                else:
-                    status_box.error(f"❌ Failed: {result}")
-
-    # --- RESULT DISPLAY ---
-    if 'result' in st.session_state:
-        raw_text = st.session_state['result']
-        
-        # Parse
-        data = []
-        for line in raw_text.split('\n'):
-            if "|" in line and "ID |" not in line and "---" not in line:
-                parts = line.split('|')
-                if len(parts) >= 3:
-                    data.append({
-                        "#": parts[0].strip(),
-                        "Yiddish": parts[1].strip(),
-                        "English": parts[2].strip().replace("~", "<br>")
-                    })
-        
-        # Display Cards
-        if data:
-            df = pd.DataFrame(data)
-            for idx, row in df.iterrows():
-                with st.container():
-                    c1, c2, c3 = st.columns([1, 4, 4])
-                    c1.caption(row['#'])
-                    c2.text(row['Yiddish'])
-                    c3.markdown(f"**{row['English']}**", unsafe_allow_html=True)
-                    st.divider()
-            
-            # DOCX Export
-            doc = Document()
-            table = doc.add_table(rows=1, cols=3)
-            table.style = 'Table Grid'
-            for idx, row in df.iterrows():
-                cells = table.add_row().cells
-                cells[0].text = row['#']
-                cells[1].text = row['Yiddish']
-                cells[2].text = row['English'].replace("<br>", "\n")
-            
-            bio = io.BytesIO()
-            doc.save(bio)
-            st.download_button("Download DOCX", bio.getvalue(), "translation.docx")
-        
-        # Fallback View
-        with st.expander("View Raw Output"):
-            st.text(raw_text)
+    st.subheader
