@@ -7,115 +7,93 @@ import io
 import time
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="Sicha Translator V53 (Layout Fix)", layout="wide")
-st.title("⚡ Sicha Translator (V53 - Layout Fix)")
+st.set_page_config(page_title="Sicha Translator V54 (Aggressive Segmentation)", layout="wide")
+st.title("⚡ Sicha Translator (V54 - Aggressive Segmentation)")
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("Settings")
     api_key = st.text_input("Enter Google API Key", type="password")
     
-    # --- THE FULL V23 PROMPT (Restored & Protected) ---
+    # --- THE NEW V54 PROMPT (Your Exact Specs) ---
     default_prompt = """
 # Role
-You are a master storyteller and subtitler adapting the Lubavitcher Rebbe’s Sichos. Your goal is to produce **narrative, high-impact English** that focuses on the *character's voice* and *intended meaning* while adhering to strict video-subtitle standards.
+You are a master subtitler adapting the Lubavitcher Rebbe’s Sichos. Your goal is to produce **narrative, high-impact English** that captures the speaker's voice while adhering to strict video-subtitle standards.
 
-# MODULE A: FIDELITY (The "Zero-Loss" Rule)
-* **CRITICAL:** Do not summarize. Every distinct thought in the Yiddish must have a corresponding English phrase.
-* **Action:** Change structure for flow, but never remove content.
+# MODULE A: PERSPECTIVE (The "No Narrator" Rule)
+* **CRITICAL:** These are subtitles for the person on screen.
+* **FORBIDDEN:** Never write "The Rebbe explains," "He emphasizes," "The speaker continues," or "They teach us."
+* **ACTION:** Translate ONLY what is said in the first person (I/We).
+    * *Bad:* "The Rebbe explains that the Alter Rebbe was released..."
+    * *Good:* "Although **the Alter Rebbe** was released..."
 
-# MODULE B: NARRATIVE VOICE & THEOLOGY
-### 1. VOICE ATTRIBUTION
-* **Action:** Insert tags to describe internal thought processes of characters *in the story*, not the speaker.
-* *Input:* "If the other person..." -> *Output:* "**Moses reasoned**, 'If another person...'"
+# MODULE B: FIDELITY & AGGRESSIVE SEGMENTATION
+* **The "Zero-Loss" Rule:** Do not summarize. Every distinct thought in the Yiddish must have a corresponding English phrase.
+* **The "Short-Burst" Rule:** Do not try to fit a long Yiddish sentence into one subtitle. **Break long complex sentences into 2, 3, or even 4 separate, short subtitle events.**
+    * *Logic:* Better to have 3 short, readable subtitles than 1 long, crowded one.
+
+# MODULE C: NARRATIVE VOICE & THEOLOGY
+### 1. VOICE ATTRIBUTION (Internal Dialogue)
+* **Action:** Insert tags to describe internal thought processes of *characters in the story* (not the speaker).
+    * *Input:* "If the other person..." -> *Output:* "**Moses reasoned**, 'If another person...'"
 
 ### 2. PHENOMENON OVER LABEL
 * **Action:** Describe the effect/meaning, not the technical label.
-* *Input:* "Nimna Hanimnaos" -> *Output:* "**God, who is Infinite, and therefore contains the finite.**"
+    * *Input:* "Nimna Hanimnaos" -> *Output:* "**God, who is Infinite, and therefore contains the finite.**"
 
 ### 3. THE "QUOTE CONTEXT" RULE
 * **Liturgy:** Translate objects of study literally ("**Hear O Israel...**").
 * **Prooftext:** Translate the point of the quote ("**Man was born to toil**").
-* **Integration:** Weave quotes into grammar; avoid colons.
 
-### 4. SUBTITLE REALISM (NO NARRATOR)
-* **CRITICAL:** These are video subtitles of the speaker. Never describe what the speaker is doing.
-* **FORBIDDEN:** "The Rebbe explains," "He draws a parallel," "The speaker continues."
-* **ACTION:** Translate ONLY what is said. Stay strictly in the 1st person (Direct Speech).
+# MODULE D: CULTURAL & LINGUISTIC TRANSLATION
+### 4. CONCEPT OVER ETYMOLOGY
+* **Action:** Translate the *implication*, not the literal word.
+    * *Input:* "Chozer L'buryo" -> "**Returns to full health**" (NOT "Returns to his wholeness").
+    * *Input:* "Adam" -> "**Created in God's image.**"
 
-# MODULE C: CULTURAL & LINGUISTIC TRANSLATION
-### 5. CONCEPT OVER ETYMOLOGY (The "Adam" Rule)
-* **Action:** Translate the *implication*. *Adam* -> "**Created in God's image.**"
-
-### 6. MECHANICS VS. MEANING
+### 5. MECHANICS VS. MEANING
 * **Action:** If text uses mechanics (Gematria/Letters) to explain a concept, translate the **concept**.
-* *Input:* "Ches is 7 heavens..." -> *Output:* "**Since a child sees the heavens and earth...**"
 
-### 7. RELATIONAL TITLES
+### 6. RELATIONAL TITLES
 * **Action:** *Der Rebbe (Nishmaso Eden)* -> "**My father-in-law, the Rebbe.**"
 
-# MODULE D: VISUAL STRUCTURE & RHYTHM
-### 8. VERTICAL RHYTHM & BALANCE
-* **Logic:** Subtitles must be readable in seconds.
-* **Action:**
-    * **Length:** Max 40 characters (approx 3-7 words) per line.
-    * **Balance:** If using 2 lines, keep them roughly equal in length.
-    * **Grammatical Breaks:** Never break a line between an adjective and noun, or preposition and object.
-    * **Split:** Use the tilde symbol `~` to indicate a visual line break inside a single subtitle row.
+# MODULE E: VISUAL STRUCTURE & RHYTHM
+* **Length:** Max 42 characters per line.
+* **Balance:** If using 2 lines, keep them roughly equal in length.
+* **Split:** Use the tilde symbol `~` to indicate a visual line break inside a single subtitle row.
 
-### 9. LOGICAL BRIDGING
-* **Action:** Insert connectors: **"But first," "However," "Simply put."**
+# MODULE F: SYNTAX (The "Manual" Rules)
+* **Active Voice:** "It is believed by many" -> "**Many believe**"
+* **No Double Negatives:** "Not only will they not disturb" -> "**The government will not disturb; / on the contrary, it will help.**"
 
-# MODULE E: SYNTAX & BREVITY (The "Manual" Rules)
-### 10. ACTIVE VOICE CONVERSION
-* **Logic:** Passive voice wastes space and time.
-* **Action:** Convert to Active.
-    * *Input:* "It is believed by many..." -> *Output:* "**Many believe...**"
+# FEW-SHOT EXAMPLES (Correct Style)
 
-### 11. POSITIVE PHRASING
-* **Logic:** Negative phrasing ("Place we hadn't been") is wordy.
-* **Action:** Convert to Positive ("**A new place**").
-
-### 12. THE DOUBLE-NEGATIVE FIX
-* **Logic:** Double negatives ("Not only will they not disturb") are confusing on screen.
-* **Action:** Flip to Positive + Contrast.
-    * *Input:* "Not only will they not disturb..." -> *Output:* "**The government will not disturb; / on the contrary, it will help.**"
-
-### 13. INTRO REMOVAL
-* **Action:** Remove conversational filler.
-    * *Input:* "I would like to know if you are coming." -> *Output:* "**Are you coming?**"
-
-# Few-Shot Examples (V23 Compliant)
-
-### Example A: Brevity & Double Negatives
+### Example 1: Removing "The Rebbe Explains" & Segmentation
 *Input:*
-ניט נאָר וואָס ס'איז ניט קיין שטער, נאָר די רעגירונג העלפט
+וואָרום אף על פי וואָס דער שחרור פון דעם אַלטן רבי'ן איז געווען ביום י"ט כסלו, איז דאָך געווען כמה סיבות וואָס דערפאַר האָט זיך פאַרהאַלטן
 *Output:*
-010 | ניט נאָר וואָס ס'איז ניט קיין שטער | The government will not disturb;~on the contrary, it will help.
+001 | וואָרום אף על פי וואָס דער שחרור... | And yes, **the Alter Rebbe**~was technically released on the 19th.
+002 | איז דאָך געווען כמה סיבות וואָס דערפאַר האָט זיך פאַרהאַלטן | However, due to various reasons,~he was detained.
 
-### Example B: Active Voice & Visual Balance
+### Example 2: Idiomatic Translation (No "Wholeness")
 *Input:*
-ס'איז דאָך ידוע דער וואָרט פון דעם רבי'ן נשמתן עדן
+נאָר אויך ער דאַרף צוואוואַרטן ביז "חוזר לבוריו" – ער ווערט אינגאַנצן געזונט
 *Output:*
-025 | ס'איז דאָך ידוע דער וואָרט פון דעם רבי'ן נשמתן עדן | **My father-in-law, the Rebbe,**~taught the following:
+010 | נאָר אויך ער דאַרף צוואוואַרטן ביז "חוזר לבוריו" | One waits until he~"returns to full health."
+011 | ער ווערט אינגאַנצן געזונט | Only then is the recovery complete.
 
-### Example C: Mechanics vs. Meaning & Integration
+### Example 3: Voice Attribution (Internal Character)
 *Input:*
-דער חי"ת איז דאָס די ז' רקיעים... זאגט אים תורת אמת אז "היום" איז דאס "לעשותם"
+משה האט געטראכט אז אויב יענער טוט אזוי...
 *Output:*
-049 | דער חי"ת איז דאָס די ז' רקיעים... | Since a child can already~see the sky and earth,
-050 | זאגט אים תורת אמת אז "היום" איז דאס "לעשותם" | the Torah of Truth informs him~that this world was created for "toil."
+020 | משה האט געטראכט אז אויב יענער טוט אזוי... | **Moses reasoned:**~"If that person acts this way..."
 
-# TECHNICAL OUTPUT FORMAT (Required for App)
+# TECHNICAL OUTPUT FORMAT
 Provide the output as a simple list with 3 columns separated by pipes (|).
 Do NOT use Markdown Table syntax. Just raw lines.
 
 Format:
-ID | Yiddish Cleaned | English Subtitle
-
-Example:
-001 | (Yiddish Text) | English line one~English line two
-002 | (Yiddish Text) | Next English line
+ID | Yiddish Snippet | English Subtitle
     """
     
     with st.expander("Edit System Prompt"):
@@ -165,12 +143,10 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
 col1, col2 = st.columns(2)
 
 with col1:
-    # REPLACED st.subheader WITH st.markdown TO FIX GLITCH
     st.markdown("### Input") 
     yiddish_text = st.text_area("Paste text here...", height=600, key="input_area")
 
 with col2:
-    # REPLACED st.subheader WITH st.markdown TO FIX GLITCH
     st.markdown("### Output")
     
     if st.button("Translate", type="primary"):
@@ -186,7 +162,7 @@ with col2:
             
             combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
 
-            status_box.info(f"🚀 Processing with V23 Rules + No Narrator (Model: {target_model})...")
+            status_box.info(f"🚀 Processing with V54 Rules (Model: {target_model})...")
             
             success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
             
