@@ -5,6 +5,7 @@ import pandas as pd
 from docx import Document
 import io
 import time
+import concurrent.futures
 
 # --- PAGE CONFIG ---
 st.set_page_config(
@@ -34,6 +35,7 @@ def confirm_clear_action():
     st.session_state['result'] = None
     st.session_state['input_area'] = ""
     st.session_state['confirm_clear'] = False
+    st.rerun()
 
 def cancel_clear():
     """Cancel the clear request."""
@@ -85,7 +87,7 @@ st.markdown("""
     div.stButton > button[kind="secondary"] {
         background-color: #FFFFFF !important;
         border: 2px solid #8B5A2B !important;
-        color: #8B5A2B !important; /* Dark Brown Text Always Visible */
+        color: #8B5A2B !important;
         font-weight: bold !important;
         border-radius: 8px;
         transition: all 0.3s ease;
@@ -106,6 +108,39 @@ st.markdown("""
         box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
     }
 
+    /* --- LOADING STEPS STYLING --- */
+    .step-box {
+        background-color: #FFF;
+        border: 1px solid #E0DACC;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+    }
+    .step-item {
+        font-family: 'Helvetica Neue', sans-serif;
+        font-size: 1.05em;
+        padding: 8px 0;
+        color: #888;
+        display: flex;
+        align-items: center;
+        transition: color 0.3s ease;
+    }
+    .step-item.active {
+        color: #8B5A2B;
+        font-weight: bold;
+    }
+    .step-item.done {
+        color: #2E7D32; /* Green */
+        font-weight: bold;
+    }
+    .step-icon {
+        margin-right: 12px;
+        width: 20px;
+        display: inline-block;
+        text-align: center;
+    }
+
     /* --- TABLE STYLING --- */
     .results-table {
         width: 100%;
@@ -117,7 +152,6 @@ st.markdown("""
         box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         border: 1px solid #E0DACC;
     }
-    
     .results-table th {
         background-color: #EBE5D5;
         color: #4A3B32;
@@ -129,47 +163,21 @@ st.markdown("""
         text-transform: uppercase;
         letter-spacing: 0.5px;
     }
-
     .results-table td {
         padding: 12px 15px;
         border-bottom: 1px solid #F0EAE0;
         vertical-align: top; 
         color: #333;
     }
-
     .results-table tr:last-child td {
         border-bottom: none;
     }
-    
     .results-table tr:hover {
         background-color: #FAF8F2;
     }
-    
-    .id-col {
-        width: 50px;
-        color: #8B5A2B;
-        font-weight: bold;
-        font-size: 0.85em;
-        text-align: center;
-    }
-    
-    .yiddish-col {
-        font-family: 'Frank Ruhl Libre', 'Alef', serif;
-        font-size: 1.3em;
-        direction: rtl;
-        text-align: right;
-        color: #222;
-        width: 45%;
-        line-height: 1.5;
-    }
-
-    .english-col {
-        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        font-size: 1.05em;
-        line-height: 1.5;
-        width: 45%;
-        color: #111;
-    }
+    .id-col { width: 50px; color: #8B5A2B; font-weight: bold; font-size: 0.85em; text-align: center; }
+    .yiddish-col { font-family: 'Frank Ruhl Libre', 'Alef', serif; font-size: 1.3em; direction: rtl; text-align: right; color: #222; width: 45%; line-height: 1.5; }
+    .english-col { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 1.05em; line-height: 1.5; width: 45%; color: #111; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -261,8 +269,8 @@ ID | Yiddish Snippet | English Subtitle
     with st.expander("Edit System Prompt"):
         system_prompt = st.text_area("Prompt", value=default_prompt, height=400)
 
-# --- RETRY FUNCTION ---
-def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retries=5):
+# --- API FUNCTION (SYNC) ---
+def call_api(model_name, api_key, full_prompt):
     url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={api_key}"
     headers = {'Content-Type': 'application/json'}
     data = {
@@ -275,26 +283,21 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
         ]
     }
     
-    for attempt in range(max_retries):
-        try:
-            response = requests.post(url, headers=headers, data=json.dumps(data))
-            if response.status_code == 200:
-                result_json = response.json()
-                try:
-                    text = result_json['candidates'][0]['content']['parts'][0]['text']
-                    return True, text
-                except KeyError:
-                    return False, f"Parsed JSON but found no text: {result_json}"
-            elif response.status_code == 503:
-                time.sleep(3)
-                continue
-            elif response.status_code == 404:
-                return False, "NOT_FOUND"
-            else:
-                return False, f"Error {response.status_code}: {response.text}"
-        except Exception as e:
-            return False, str(e)
-    return False, "MAX_RETRIES_EXCEEDED"
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(data))
+        if response.status_code == 200:
+            result_json = response.json()
+            try:
+                text = result_json['candidates'][0]['content']['parts'][0]['text']
+                return True, text
+            except KeyError:
+                return False, f"Parsed JSON but found no text: {result_json}"
+        elif response.status_code == 404:
+            return False, "NOT_FOUND"
+        else:
+            return False, f"Error {response.status_code}: {response.text}"
+    except Exception as e:
+        return False, str(e)
 
 # --- HEADER (LOGO RIGHT) ---
 header_col1, header_col2 = st.columns([5, 1])
@@ -310,7 +313,6 @@ col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
     st.markdown("### Input Transcript") 
-    # Added on_change callback to clear results when user types
     yiddish_text = st.text_area(
         "Paste Yiddish text here...", 
         height=600, 
@@ -321,15 +323,14 @@ with col1:
 with col2:
     st.markdown("### Generated Subtitles")
     
-    # Buttons Row
+    # Buttons
     b_col1, b_col2 = st.columns([3, 2])
     with b_col1:
         translate_btn = st.button("TRANSLATE", type="primary", use_container_width=True)
     with b_col2:
-        # Calls request_clear() to trigger the safety dialog
         clear_btn = st.button("CLEAR", type="secondary", use_container_width=True, on_click=request_clear)
 
-    # --- CONFIRMATION DIALOG ---
+    # Confirmation
     if st.session_state.get('confirm_clear'):
         st.warning("⚠️ **Are you sure?** Unsaved translations will be lost.")
         conf_col1, conf_col2 = st.columns([1, 1])
@@ -338,7 +339,7 @@ with col2:
         with conf_col2:
             st.button("No, Cancel", type="secondary", use_container_width=True, on_click=cancel_clear)
 
-    # Placeholder for logic
+    # Logic Container
     result_container = st.container()
 
     if translate_btn and not st.session_state.get('confirm_clear'):
@@ -347,24 +348,73 @@ with col2:
         elif not yiddish_text:
             st.warning("Please paste text to translate.")
         else:
-            target_model = "models/gemini-2.5-flash" 
             combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
-
-            with st.spinner("Bringing the Rebbe to the English speaking world..."):
-                success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
             
+            # --- THE LOADING SIMULATION ---
+            loading_placeholder = st.empty()
+            
+            # Logic Steps Definition
+            steps = [
+                "Analyzing First-Person Perspective...",
+                "Applying Segmentation Rules...",
+                "Verifying Narrative Voice & Context...",
+                "Checking Cultural Nuances...",
+                "Optimizing Visual Rhythm...",
+                "Finalizing Syntax & Grammar..."
+            ]
+            
+            # Start API in Thread
+            executor = concurrent.futures.ThreadPoolExecutor()
+            future = executor.submit(call_api, "models/gemini-2.5-flash", api_key, combined_prompt)
+            
+            # Loop for Animation while waiting
+            step_idx = 0
+            start_time = time.time()
+            
+            while not future.done():
+                # Build HTML for current state
+                html_content = '<div class="step-box">'
+                html_content += '<div style="margin-bottom:10px; font-weight:bold; color:#4A3B32;">Bringing the Rebbe to the English speaking world...</div>'
+                
+                for i, step_text in enumerate(steps):
+                    if i < step_idx:
+                        # Completed steps
+                        icon = "✅"
+                        cls = "step-item done"
+                    elif i == step_idx:
+                        # Current step
+                        icon = "🔄"
+                        cls = "step-item active"
+                    else:
+                        # Pending steps
+                        icon = "⚪"
+                        cls = "step-item"
+                    
+                    html_content += f'<div class="{cls}"><span class="step-icon">{icon}</span>{step_text}</div>'
+                
+                html_content += '</div>'
+                loading_placeholder.markdown(html_content, unsafe_allow_html=True)
+                
+                # Advance step slowly (simulate thinking)
+                time.sleep(0.8) # Update speed
+                if step_idx < len(steps) - 1:
+                    step_idx += 1
+            
+            # Get Result
+            success, result = future.result()
+            
+            # If not found, try backup (Standard UI spinner for backup)
+            if not success and result == "NOT_FOUND":
+                 loading_placeholder.info("Trying backup model...")
+                 success, result = call_api("models/gemini-1.5-flash", api_key, combined_prompt)
+
+            # Cleanup Loader
+            loading_placeholder.empty()
+
             if success:
                 st.session_state['result'] = result
             else:
-                if result == "NOT_FOUND":
-                     with st.spinner("Switching to backup model..."):
-                         success_bk, result_bk = attempt_translation_with_retries("models/gemini-1.5-flash", api_key, combined_prompt)
-                     if success_bk:
-                         st.session_state['result'] = result_bk
-                     else:
-                         st.error(f"❌ Failed: {result}")
-                else:
-                    st.error(f"❌ Failed: {result}")
+                st.error(f"❌ Failed: {result}")
 
     # --- RESULTS DISPLAY ---
     if st.session_state.get('result') and not st.session_state.get('confirm_clear'):
@@ -385,7 +435,7 @@ with col2:
         
         with result_container:
             if data:
-                # Build HTML Table (NO INDENTATION)
+                # Build HTML Table
                 table_html = """<table class="results-table">
 <thead>
 <tr>
@@ -403,7 +453,6 @@ with col2:
 </tr>"""
                 table_html += "</tbody></table>"
                 
-                # Render Table
                 st.markdown(table_html, unsafe_allow_html=True)
                 
                 # DOCX Export
