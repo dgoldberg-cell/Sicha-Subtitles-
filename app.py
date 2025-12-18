@@ -16,8 +16,8 @@ st.set_page_config(
 # --- CUSTOM CSS (The Design Overhaul) ---
 st.markdown("""
 <style>
-    /* IMPORT HEBREW FONT (Frank Ruhl Libre) */
-    @import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700&display=swap');
+    /* IMPORT HEBREW FONTS */
+    @import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700&family=Alef:wght@400;700&display=swap');
 
     /* MAIN BACKGROUND */
     .stApp {
@@ -64,7 +64,7 @@ st.markdown("""
         box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
     }
 
-    /* --- TABLE STYLING (NEW) --- */
+    /* --- TABLE STYLING --- */
     .results-table {
         width: 100%;
         border-collapse: collapse;
@@ -73,6 +73,7 @@ st.markdown("""
         border-radius: 8px;
         overflow: hidden;
         box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        border: 1px solid #E0DACC;
     }
     
     .results-table th {
@@ -82,12 +83,15 @@ st.markdown("""
         text-align: left;
         font-weight: bold;
         border-bottom: 2px solid #D7D0C0;
+        font-size: 0.95em;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
     }
 
     .results-table td {
         padding: 12px 15px;
         border-bottom: 1px solid #F0EAE0;
-        vertical-align: top;
+        vertical-align: top; /* Align text to top */
         color: #333;
     }
 
@@ -95,28 +99,34 @@ st.markdown("""
         border-bottom: none;
     }
     
+    .results-table tr:hover {
+        background-color: #FAF8F2;
+    }
+    
     .id-col {
         width: 50px;
         color: #8B5A2B;
         font-weight: bold;
         font-size: 0.85em;
+        text-align: center;
     }
     
     .yiddish-col {
-        font-family: 'Frank Ruhl Libre', serif; /* NEW CLEAR HEBREW FONT */
-        font-size: 1.2em;
+        font-family: 'Frank Ruhl Libre', 'Alef', serif;
+        font-size: 1.25em; /* Slightly larger for readability */
         direction: rtl;
         text-align: right;
         color: #222;
         width: 45%;
-        line-height: 1.4;
+        line-height: 1.5;
     }
 
     .english-col {
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         font-size: 1.05em;
-        line-height: 1.4;
+        line-height: 1.5;
         width: 45%;
+        color: #111;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -309,7 +319,10 @@ with col2:
                     data.append({
                         "id": parts[0].strip(),
                         "yiddish": parts[1].strip(),
-                        "english": parts[2].strip().replace("~", "<br>")
+                        # For Screen: Replace ~ with space for clean reading
+                        "english_clean": parts[2].strip().replace("~", " "),
+                        # For Export: Keep ~ (or use \n) for subtitle separation
+                        "english_raw": parts[2].strip().replace("~", "\n")
                     })
         
         with result_container:
@@ -332,7 +345,7 @@ with col2:
                     <tr>
                         <td class="id-col">{row['id']}</td>
                         <td class="yiddish-col">{row['yiddish']}</td>
-                        <td class="english-col">{row['english']}</td>
+                        <td class="english-col">{row['english_clean']}</td>
                     </tr>
                     """
                 
@@ -350,7 +363,7 @@ with col2:
                     cells = table.add_row().cells
                     cells[0].text = row['id']
                     cells[1].text = row['yiddish']
-                    cells[2].text = row['english'].replace("<br>", "\n")
+                    cells[2].text = row['english_raw'] # Uses actual line breaks
                 
                 bio = io.BytesIO()
                 doc.save(bio)
