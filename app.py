@@ -21,6 +21,8 @@ if 'confirm_clear' not in st.session_state:
     st.session_state['confirm_clear'] = False
 if 'input_text' not in st.session_state:
     st.session_state['input_text'] = ""
+if 'file_error' not in st.session_state:
+    st.session_state['file_error'] = None
 
 # --- CALLBACKS ---
 def on_text_change():
@@ -39,6 +41,7 @@ def confirm_clear_action():
     st.session_state['result'] = None
     st.session_state['input_text'] = ""
     st.session_state['confirm_clear'] = False
+    st.session_state['file_error'] = None
     st.rerun()
 
 def cancel_clear():
@@ -46,28 +49,38 @@ def cancel_clear():
     st.session_state['confirm_clear'] = False
 
 def handle_file_upload():
-    """Read uploaded file (TXT or DOCX) and populate text area."""
+    """Read uploaded file (TXT or DOCX) with lenient filtering."""
     uploaded_file = st.session_state.uploaded_file
+    st.session_state['file_error'] = None # Reset errors
+    
     if uploaded_file is not None:
+        file_name = uploaded_file.name.lower()
         try:
-            # Handle .docx files
-            if uploaded_file.name.lower().endswith('.docx'):
+            # Handle .docx
+            if file_name.endswith('.docx'):
                 doc = Document(uploaded_file)
                 full_text = []
                 for para in doc.paragraphs:
                     full_text.append(para.text)
-                file_content = '\n'.join(full_text)
+                st.session_state['input_text'] = '\n'.join(full_text)
+                st.session_state['result'] = None
             
-            # Handle .txt files
-            else:
+            # Handle .txt
+            elif file_name.endswith('.txt'):
                 stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
-                file_content = stringio.read()
+                st.session_state['input_text'] = stringio.read()
+                st.session_state['result'] = None
+                
+            # Handle .doc (Legacy)
+            elif file_name.endswith('.doc'):
+                st.session_state['file_error'] = "⚠️ **Legacy File Detected:** You uploaded an old Word format (.doc). Please save it as a modern .docx file and try again."
             
-            # Update state
-            st.session_state['input_text'] = file_content
-            st.session_state['result'] = None # Reset results
+            # Handle Unknown
+            else:
+                st.session_state['file_error'] = f"⚠️ **Unsupported File:** The file '{uploaded_file.name}' is not supported. Please upload a .txt or .docx file."
+                
         except Exception as e:
-            st.error(f"Error reading file: {e}")
+            st.session_state['file_error'] = f"❌ **Error reading file:** {str(e)}"
 
 # --- CUSTOM CSS ---
 st.markdown("""
@@ -139,6 +152,10 @@ st.markdown("""
     /* FILE UPLOADER STYLE */
     [data-testid='stFileUploader'] {
         margin-bottom: 10px;
+    }
+    [data-testid='stFileUploader'] section {
+        background-color: #FFF;
+        border: 1px dashed #A67C52;
     }
 
     /* --- LOADING STEPS STYLING --- */
@@ -371,14 +388,18 @@ col1, col2 = st.columns([1, 1], gap="large")
 with col1:
     st.markdown("### Input Transcript")
     
-    # File Uploader
+    # File Uploader (NO TYPE RESTRICTION - HANDLED IN LOGIC)
     st.file_uploader(
         "Upload File (.txt or .docx)", 
-        type=["txt", "docx"], 
+        type=None, 
         key="uploaded_file", 
         on_change=handle_file_upload,
         label_visibility="collapsed"
     )
+    
+    # Error Message for File Upload
+    if st.session_state.get('file_error'):
+        st.markdown(st.session_state['file_error'])
 
     # Text Area
     yiddish_text = st.text_area(
