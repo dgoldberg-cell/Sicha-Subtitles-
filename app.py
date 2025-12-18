@@ -19,12 +19,16 @@ if 'result' not in st.session_state:
     st.session_state['result'] = None
 if 'confirm_clear' not in st.session_state:
     st.session_state['confirm_clear'] = False
+if 'input_text' not in st.session_state:
+    st.session_state['input_text'] = ""
 
 # --- CALLBACKS ---
 def on_text_change():
     """Clear previous results immediately when text changes."""
     st.session_state['result'] = None
     st.session_state['confirm_clear'] = False
+    # Sync text area content to session state
+    st.session_state['input_text'] = st.session_state.input_area
 
 def request_clear():
     """Trigger the confirmation dialog."""
@@ -33,13 +37,25 @@ def request_clear():
 def confirm_clear_action():
     """Actually clear the data."""
     st.session_state['result'] = None
-    st.session_state['input_area'] = ""
+    st.session_state['input_text'] = ""
     st.session_state['confirm_clear'] = False
     st.rerun()
 
 def cancel_clear():
     """Cancel the clear request."""
     st.session_state['confirm_clear'] = False
+
+def handle_file_upload():
+    """Read uploaded file and populate text area."""
+    uploaded_file = st.session_state.uploaded_file
+    if uploaded_file is not None:
+        try:
+            stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
+            file_content = stringio.read()
+            st.session_state['input_text'] = file_content
+            st.session_state['result'] = None # Reset previous results on new file load
+        except Exception as e:
+            st.error(f"Error reading file: {e}")
 
 # --- CUSTOM CSS ---
 st.markdown("""
@@ -106,6 +122,11 @@ st.markdown("""
         border-radius: 8px;
         color: #333333;
         box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+    }
+    
+    /* FILE UPLOADER STYLE */
+    [data-testid='stFileUploader'] {
+        margin-bottom: 10px;
     }
 
     /* --- LOADING STEPS STYLING --- */
@@ -336,11 +357,23 @@ st.markdown("---")
 col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
-    st.markdown("### Input Transcript") 
+    st.markdown("### Input Transcript")
+    
+    # File Uploader
+    st.file_uploader(
+        "Upload Text File (.txt)", 
+        type=["txt"], 
+        key="uploaded_file", 
+        on_change=handle_file_upload,
+        label_visibility="collapsed"
+    )
+
+    # Text Area
     yiddish_text = st.text_area(
         "Paste Yiddish text here...", 
         height=600, 
         key="input_area",
+        value=st.session_state['input_text'],
         on_change=on_text_change
     )
 
@@ -395,22 +428,11 @@ with col2:
             total_steps = len(steps)
             current_step = 0
             
-            # We enforce a minimum time per step to make it readable
-            # but we also check if the future is done to not wait forever 
-            # if the API is actually super slow (rare, but good practice).
-            
             while current_step < total_steps:
-                # Render current state
                 loading_placeholder.markdown(render_steps(steps, current_step), unsafe_allow_html=True)
-                
-                # Wait a fixed amount of time per step (e.g. 1.2 seconds) to ensure readability
                 time.sleep(1.2)
-                
-                # If API is done early, we still finish the animation loop visually
-                # If API is slow, we will hold on the last step (handled below)
                 current_step += 1
             
-            # If the loop finished but API is still running, show "Finalizing..." on the last step
             while not future.done():
                  loading_placeholder.markdown(render_steps(steps, total_steps - 1), unsafe_allow_html=True)
                  time.sleep(0.5)
