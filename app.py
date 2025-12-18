@@ -7,14 +7,81 @@ import io
 import time
 
 # --- PAGE CONFIG ---
-st.set_page_config(page_title="JEM English Subtitle Generator", layout="wide")
+st.set_page_config(
+    page_title="JEM English Subtitle Generator",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- SIDEBAR (WITH NEW JEM AI LOGO) ---
+# --- CUSTOM CSS (The Design Overhaul) ---
+st.markdown("""
+<style>
+    /* MAIN BACKGROUND */
+    .stApp {
+        background-color: #FDFBF7;
+        color: #4A3B32;
+    }
+
+    /* SIDEBAR BACKGROUND */
+    section[data-testid="stSidebar"] {
+        background-color: #F3F0E6;
+        border-right: 1px solid #E0DACC;
+    }
+
+    /* HEADERS (H1, H2, H3) */
+    h1, h2, h3, h4, .stMarkdown {
+        color: #4A3B32 !important;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    }
+    
+    /* CUSTOM "COPPER" BUTTONS */
+    div.stButton > button {
+        background: linear-gradient(135deg, #A67C52 0%, #8B5A2B 100%);
+        color: white !important;
+        border: none;
+        border-radius: 8px;
+        padding: 0.6rem 1.5rem;
+        font-weight: 600;
+        box-shadow: 0 4px 6px rgba(139, 90, 43, 0.2);
+        transition: all 0.3s ease;
+    }
+    
+    div.stButton > button:hover {
+        background: linear-gradient(135deg, #8B5A2B 0%, #6F4E37 100%);
+        box-shadow: 0 6px 8px rgba(139, 90, 43, 0.3);
+        transform: translateY(-1px);
+    }
+
+    /* TEXT AREAS (INPUT) */
+    .stTextArea textarea {
+        background-color: #FFFFFF;
+        border: 1px solid #D7D0C0;
+        border-radius: 8px;
+        color: #333333;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+    }
+    
+    /* SUCCESS/INFO BOXES */
+    .stAlert {
+        background-color: #FFFFFF;
+        border: 1px solid #D7D0C0;
+        border-radius: 8px;
+        color: #4A3B32;
+    }
+
+    /* DIVIDER */
+    hr {
+        border-color: #D7D0C0;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- SIDEBAR ---
 with st.sidebar:
-    # UPDATED LOGO
+    # JEM AI LOGO
     st.image("https://cdn.prod.website-files.com/67dd48176b6e7b21cf6cc9bc/67ecd01b1392af3e91a89ee2_d68e8bf608547d781d6eaf13a23203df_jem%20ai%20hero.svg", use_column_width=True)
     
-    st.header("Settings")
+    st.markdown("### Settings")
     api_key = st.text_input("Enter Google API Key", type="password")
     
     # --- THE V54 PROMPT (UNTOUCHED) ---
@@ -139,32 +206,37 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
 
 # --- MAIN PAGE ---
 st.title("JEM English Subtitle Generator For Sichos")
+st.markdown("---")
 
-col1, col2 = st.columns(2)
+col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
-    st.markdown("### Input") 
-    yiddish_text = st.text_area("Paste text here...", height=600, key="input_area")
+    st.markdown("### Input Transcript") 
+    yiddish_text = st.text_area("Paste Yiddish text here...", height=600, key="input_area", help="Paste the raw Yiddish transcript.")
 
 with col2:
-    st.markdown("### Output")
+    st.markdown("### Generated Subtitles")
     
-    if st.button("Translate", type="primary"):
+    # Placeholder for where results go
+    result_container = st.container()
+
+    # The Translate Button (Centered in Logic)
+    if st.button("TRANSLATE", type="primary", use_container_width=True):
         if not api_key:
-            st.error("Please enter your API Key.")
+            st.error("Please enter your API Key in the sidebar.")
         elif not yiddish_text:
-            st.warning("Please paste text.")
+            st.warning("Please paste text to translate.")
         else:
             status_box = st.empty()
             target_model = "models/gemini-2.5-flash" 
             combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
 
-            status_box.info(f"🚀 Processing (Model: {target_model})...")
+            status_box.info(f"🚀 Processing with JEM Engine (Model: {target_model})...")
             
             success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
             
             if success:
-                status_box.success("✅ Connected & Translated!")
+                status_box.success("✅ Translation Complete")
                 st.session_state['result'] = result
             else:
                 if result == "NOT_FOUND":
@@ -195,30 +267,34 @@ with col2:
                     })
         
         # Display Cards
-        if data:
-            df = pd.DataFrame(data)
-            for idx, row in df.iterrows():
-                with st.container():
-                    c1, c2, c3 = st.columns([1, 4, 4])
-                    c1.caption(row['#'])
-                    c2.text(row['Yiddish'])
-                    c3.markdown(f"**{row['English']}**", unsafe_allow_html=True)
-                    st.divider()
+        with result_container:
+            if data:
+                df = pd.DataFrame(data)
+                
+                # Custom Card Display
+                for idx, row in df.iterrows():
+                    st.markdown(f"""
+                    <div style="background-color: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #E0DACC;">
+                        <div style="color: #8B5A2B; font-size: 0.8em; font-weight: bold; margin-bottom: 5px;">{row['#']}</div>
+                        <div style="font-family: monospace; color: #666; font-size: 0.9em; margin-bottom: 8px;">{row['Yiddish']}</div>
+                        <div style="font-size: 1.1em; color: #333; font-weight: 600; line-height: 1.4;">{row['English']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                # DOCX Export
+                doc = Document()
+                table = doc.add_table(rows=1, cols=3)
+                table.style = 'Table Grid'
+                for idx, row in df.iterrows():
+                    cells = table.add_row().cells
+                    cells[0].text = row['#']
+                    cells[1].text = row['Yiddish']
+                    cells[2].text = row['English'].replace("<br>", "\n")
+                
+                bio = io.BytesIO()
+                doc.save(bio)
+                st.download_button("Download DOCX", bio.getvalue(), "translation.docx", use_container_width=True)
             
-            # DOCX Export
-            doc = Document()
-            table = doc.add_table(rows=1, cols=3)
-            table.style = 'Table Grid'
-            for idx, row in df.iterrows():
-                cells = table.add_row().cells
-                cells[0].text = row['#']
-                cells[1].text = row['Yiddish']
-                cells[2].text = row['English'].replace("<br>", "\n")
-            
-            bio = io.BytesIO()
-            doc.save(bio)
-            st.download_button("Download DOCX", bio.getvalue(), "translation.docx")
-        
-        # Fallback View
-        with st.expander("View Raw Output"):
-            st.text(raw_text)
+            # Fallback View
+            with st.expander("View Raw Output"):
+                st.text(raw_text)
