@@ -49,38 +49,59 @@ def cancel_clear():
     st.session_state['confirm_clear'] = False
 
 def handle_file_upload():
-    """Read uploaded file (TXT or DOCX) with lenient filtering."""
+    """Robust file reader that attempts multiple formats."""
     uploaded_file = st.session_state.uploaded_file
     st.session_state['file_error'] = None # Reset errors
     
     if uploaded_file is not None:
         file_name = uploaded_file.name.lower()
-        try:
-            # Handle .docx
-            if file_name.endswith('.docx'):
-                doc = Document(uploaded_file)
+        success = False
+        
+        # ATTEMPT 1: Try reading as a modern DOCX (even if named .doc)
+        if not success:
+            try:
+                # We copy the file into memory to avoid seeking issues on retries
+                file_bytes = io.BytesIO(uploaded_file.getvalue())
+                doc = Document(file_bytes)
                 full_text = []
                 for para in doc.paragraphs:
                     full_text.append(para.text)
                 st.session_state['input_text'] = '\n'.join(full_text)
-                st.session_state['result'] = None
-            
-            # Handle .txt
-            elif file_name.endswith('.txt'):
+                success = True
+            except Exception:
+                pass # Fail silently, try next method
+
+        # ATTEMPT 2: Try reading as plain text (UTF-8)
+        if not success:
+            try:
                 stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
                 st.session_state['input_text'] = stringio.read()
-                st.session_state['result'] = None
-                
-            # Handle .doc (Legacy)
-            elif file_name.endswith('.doc'):
-                st.session_state['file_error'] = "⚠️ **Legacy File Detected:** You uploaded an old Word format (.doc). Please save it as a modern .docx file and try again."
-            
-            # Handle Unknown
+                success = True
+            except Exception:
+                pass
+
+        # ATTEMPT 3: Try reading as legacy text (Latin-1/Windows-1255)
+        if not success:
+            try:
+                stringio = io.StringIO(uploaded_file.getvalue().decode("latin-1"))
+                content = stringio.read()
+                # If it looks like binary garbage, reject it
+                if "\x00" in content: 
+                    raise ValueError("Binary detected")
+                st.session_state['input_text'] = content
+                success = True
+            except Exception:
+                pass
+
+        # RESULT
+        if success:
+            st.session_state['result'] = None
+        else:
+            # If all methods fail, it is likely a true binary .doc file
+            if file_name.endswith('.doc'):
+                st.session_state['file_error'] = "⚠️ **Legacy .DOC File Detected**<br>This is an old binary Word format that cannot be read directly.<br>👉 **Solution:** Open the file in Word, go to **File > Save As**, and choose **Word Document (.docx)**."
             else:
-                st.session_state['file_error'] = f"⚠️ **Unsupported File:** The file '{uploaded_file.name}' is not supported. Please upload a .txt or .docx file."
-                
-        except Exception as e:
-            st.session_state['file_error'] = f"❌ **Error reading file:** {str(e)}"
+                st.session_state['file_error'] = "❌ **Unreadable File:** Could not extract text. Please ensure it is a valid .docx or .txt file."
 
 # --- CUSTOM CSS ---
 st.markdown("""
@@ -399,7 +420,7 @@ with col1:
     
     # Error Message for File Upload
     if st.session_state.get('file_error'):
-        st.markdown(st.session_state['file_error'])
+        st.error(st.session_state['file_error'], icon="⚠️")
 
     # Text Area
     yiddish_text = st.text_area(
