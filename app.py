@@ -6,6 +6,7 @@ from docx import Document
 import io
 import time
 import concurrent.futures
+import math
 
 # --- PAGE CONFIG ---
 st.set_page_config(
@@ -25,6 +26,34 @@ if 'file_message' not in st.session_state:
     st.session_state['file_message'] = None
 if 'input_area' not in st.session_state:
     st.session_state['input_area'] = ""
+
+# --- HELPER: TEXT CHUNKER ---
+def split_text_smartly(text, chunk_size=5000):
+    """
+    Splits text into chunks of ~chunk_size characters, 
+    but only breaks on newlines to preserve sentence integrity.
+    """
+    lines = text.split('\n')
+    chunks = []
+    current_chunk = []
+    current_length = 0
+    
+    for line in lines:
+        line_len = len(line)
+        # If adding this line exceeds chunk size (and chunk isn't empty), save chunk
+        if current_length + line_len > chunk_size and current_chunk:
+            chunks.append("\n".join(current_chunk))
+            current_chunk = []
+            current_length = 0
+        
+        current_chunk.append(line)
+        current_length += line_len
+    
+    # Append remainder
+    if current_chunk:
+        chunks.append("\n".join(current_chunk))
+        
+    return chunks
 
 # --- CALLBACKS ---
 def on_text_change():
@@ -97,7 +126,6 @@ def handle_file_upload():
                 pass
 
         # 4. ATTEMPT PLAIN TEXT - HEBREW ENCODING (Windows-1255)
-        # This fixes .txt files saved on old Hebrew Windows
         if not success:
             try:
                 extracted_text = uploaded_file.getvalue().decode("cp1255")
@@ -469,59 +497,53 @@ with col2:
     if translate_btn and not st.session_state.get('confirm_clear'):
         if not api_key:
             st.error("Please enter your API Key in the sidebar.")
-        
-        # CHECK WIDGET CONTENT
         elif not yiddish_text:
             st.warning("Please paste text to translate.")
-        
         else:
-            combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
+            # 1. SPLIT INTO BATCHES
+            chunks = split_text_smartly(yiddish_text)
+            total_chunks = len(chunks)
             
-            # --- THE PACED LOADING SIMULATION ---
-            loading_placeholder = st.empty()
+            full_results_acc = []
             
-            # Steps to display
-            steps = [
-                "Analyzing First-Person Perspective...",
-                "Applying Segmentation Rules...",
-                "Verifying Narrative Voice & Context...",
-                "Checking Cultural Nuances...",
-                "Optimizing Visual Rhythm...",
-                "Finalizing Syntax & Grammar..."
-            ]
+            # 2. UI ELEMENTS FOR PROGRESS
+            progress_bar = st.progress(0)
+            status_text = st.empty()
             
-            # Start API in Thread
-            executor = concurrent.futures.ThreadPoolExecutor()
-            future = executor.submit(call_api, "models/gemini-2.5-flash", api_key, combined_prompt)
-            
-            # Animation Loop
-            total_steps = len(steps)
-            current_step = 0
-            
-            while current_step < total_steps:
-                loading_placeholder.markdown(render_steps(steps, current_step), unsafe_allow_html=True)
-                time.sleep(1.2)
-                current_step += 1
-            
-            while not future.done():
-                 loading_placeholder.markdown(render_steps(steps, total_steps - 1), unsafe_allow_html=True)
-                 time.sleep(0.5)
+            # 3. LOOP THROUGH BATCHES
+            for i, chunk in enumerate(chunks):
+                batch_num = i + 1
+                status_text.markdown(f"**Processing Batch {batch_num} of {total_chunks}...**")
+                
+                # --- Small Loading Animation for Batch 1 only (Visual Flair) ---
+                if batch_num == 1:
+                    loading_placeholder = st.empty()
+                    steps = ["Analyzing Context...", "Translating...", "Refining Syntax..."]
+                    for s_idx, s_txt in enumerate(steps):
+                        loading_placeholder.markdown(render_steps(steps, s_idx), unsafe_allow_html=True)
+                        time.sleep(0.5)
+                    loading_placeholder.empty()
 
-            # Get Result
-            success, result = future.result()
+                # Call API
+                combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text part ({batch_num}/{total_chunks}):\n{chunk}"
+                success, result = call_api("models/gemini-2.5-flash", api_key, combined_prompt)
+                
+                # Retry Logic (Backup Model)
+                if not success and result == "NOT_FOUND":
+                    success, result = call_api("models/gemini-1.5-flash", api_key, combined_prompt)
+
+                if success:
+                    full_results_acc.append(result)
+                    progress_bar.progress(batch_num / total_chunks)
+                else:
+                    st.error(f"❌ Failed on Batch {batch_num}: {result}")
+                    break
             
-            # If not found, try backup
-            if not success and result == "NOT_FOUND":
-                 loading_placeholder.info("Trying backup model...")
-                 success, result = call_api("models/gemini-1.5-flash", api_key, combined_prompt)
-
-            # Clear Loader
-            loading_placeholder.empty()
-
-            if success:
-                st.session_state['result'] = result
-            else:
-                st.error(f"❌ Failed: {result}")
+            status_text.empty()
+            
+            if len(full_results_acc) == total_chunks:
+                # Join all text for parsing
+                st.session_state['result'] = "\n".join(full_results_acc)
 
     # --- RESULTS DISPLAY ---
     if st.session_state.get('result') and not st.session_state.get('confirm_clear'):
@@ -529,12 +551,18 @@ with col2:
         
         # Parse Data
         data = []
+        global_id_counter = 1 # Force Sequential IDs across all batches
+        
         for line in raw_text.split('\n'):
             if "|" in line and "ID |" not in line and "---" not in line:
                 parts = line.split('|')
                 if len(parts) >= 3:
+                    # Clean ID: 001, 002...
+                    clean_id = f"{global_id_counter:03d}"
+                    global_id_counter += 1
+                    
                     data.append({
-                        "id": parts[0].strip(),
+                        "id": clean_id,
                         "yiddish": parts[1].strip(),
                         "english_clean": parts[2].strip().replace("~", " "),
                         "english_raw": parts[2].strip().replace("~", "\n")
