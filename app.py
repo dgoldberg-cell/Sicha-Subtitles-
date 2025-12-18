@@ -32,7 +32,6 @@ def on_text_change():
     """Clear previous results immediately when text changes."""
     st.session_state['result'] = None
     st.session_state['confirm_clear'] = False
-    # Sync text area content to session state variable
     st.session_state['input_text'] = st.session_state.input_area
 
 def request_clear():
@@ -43,7 +42,7 @@ def confirm_clear_action():
     """Actually clear the data."""
     st.session_state['result'] = None
     st.session_state['input_text'] = ""
-    st.session_state['input_area'] = "" # Clear widget
+    st.session_state['input_area'] = ""
     st.session_state['confirm_clear'] = False
     st.session_state['file_message'] = None
     st.rerun()
@@ -52,27 +51,39 @@ def cancel_clear():
     """Cancel the clear request."""
     st.session_state['confirm_clear'] = False
 
+def has_hebrew(text):
+    """Check if text contains Hebrew characters."""
+    return bool(re.search(r'[\u0590-\u05FF]', text))
+
 def scavenge_binary_text(file_bytes):
     """
-    Last resort: Treat file as binary garbage and regex-search for Hebrew/English strings.
+    Smart Scavenger: Tries multiple encodings and only accepts if Hebrew is found.
     """
-    text_found = ""
-    try:
-        # Decode broadly, replacing errors
-        content = file_bytes.getvalue().decode('cp1255', errors='replace')
-        # Regex to find chunks of Hebrew or English text (min 3 chars)
-        pattern = r"[\u0590-\u05FFa-zA-Z0-9\s\.,:;\"\'\-\(\)]{3,}"
-        matches = re.findall(pattern, content)
-        # Filter matches
-        clean_matches = [m.strip() for m in matches if len(m.strip()) > 3]
-        if clean_matches:
-            text_found = "\n".join(clean_matches)
-    except Exception:
-        pass
-    return text_found
+    encodings_to_try = ['utf-8', 'cp1255', 'iso-8859-8', 'windows-1255']
+    raw_data = file_bytes.getvalue()
+    
+    for enc in encodings_to_try:
+        try:
+            # Decode ignoring errors to get 'something'
+            content = raw_data.decode(enc, errors='ignore')
+            
+            # Check for Hebrew characters
+            if has_hebrew(content):
+                # If we found Hebrew, clean it up
+                # Find sequences of Hebrew or English (skip binary control chars)
+                pattern = r"[\u0590-\u05FFa-zA-Z0-9\s\.,:;\"\'\-\(\)]{3,}"
+                matches = re.findall(pattern, content)
+                clean_matches = [m.strip() for m in matches if len(m.strip()) > 3]
+                
+                if clean_matches:
+                    return "\n".join(clean_matches)
+        except Exception:
+            continue
+
+    return ""
 
 def handle_file_upload():
-    """Robust file reader with widget syncing."""
+    """Robust file reader."""
     uploaded_file = st.session_state.uploaded_file
     st.session_state['file_message'] = None 
     
@@ -94,46 +105,52 @@ def handle_file_upload():
             except Exception:
                 pass 
 
-        # ATTEMPT 2: Plain Text (UTF-8)
+        # ATTEMPT 2: Plain Text (UTF-8 / CP1255)
         if not success:
             try:
-                stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
-                extracted_text = stringio.read()
+                # Try UTF-8 first
+                extracted_text = uploaded_file.getvalue().decode("utf-8")
                 success = True
-            except Exception:
-                pass
+            except:
+                try:
+                    # Try Hebrew Windows
+                    extracted_text = uploaded_file.getvalue().decode("cp1255")
+                    success = True
+                except:
+                    pass
 
-        # ATTEMPT 3: Plain Text (Hebrew Legacy CP1255)
-        if not success:
-            try:
-                stringio = io.StringIO(uploaded_file.getvalue().decode("cp1255"))
-                content = stringio.read()
-                if content.count('\x00') > 5: raise ValueError("Binary file")
-                extracted_text = content
-                success = True
-            except Exception:
-                pass
-
-        # ATTEMPT 4: BRUTE FORCE SCAVENGER
+        # ATTEMPT 3: SMART SCAVENGER (The "Garbage Filter")
         if not success:
             try:
                 raw_bytes = io.BytesIO(uploaded_file.getvalue())
                 scavenged = scavenge_binary_text(raw_bytes)
-                if len(scavenged) > 10:
+                if scavenged:
                     extracted_text = scavenged
-                    st.session_state['file_message'] = "⚠️ **Note:** We forced open this legacy file. Formatting may be lost, but the text is extracted."
+                    st.session_state['file_message'] = "⚠️ **Legacy File Read:** Extracted text using Hebrew encoding. Formatting may be lost."
                     success = True
             except Exception:
                 pass
 
-        # RESULT & SYNC
-        if success:
+        # RESULT
+        if success and extracted_text.strip():
             st.session_state['input_text'] = extracted_text
             st.session_state['input_area'] = extracted_text # FORCE WIDGET UPDATE
             st.session_state['result'] = None
         else:
+            # If we failed or extracted nothing but whitespace
+            st.session_state['input_area'] = "" # Clear garbage
+            st.session_state['input_text'] = ""
+            
             if file_name.endswith('.doc'):
-                st.session_state['file_message'] = "❌ **Could not read file.** Please save as .docx in Word."
+                st.session_state['file_message'] = """
+                ❌ **Legacy Format Error**<br>
+                The file you uploaded is an old Word 97-2003 binary file (.doc) and we could not extract clear Hebrew text from it.<br><br>
+                **Solution:**<br>
+                1. Open the file in Microsoft Word.<br>
+                2. Go to **File > Save As**.<br>
+                3. Choose **Word Document (.docx)**.<br>
+                4. Upload the new .docx file here.
+                """
             else:
                 st.session_state['file_message'] = "❌ **Unreadable File.** Please upload a valid .docx or .txt file."
 
@@ -454,17 +471,16 @@ with col1:
     
     # Message for File Upload
     if st.session_state.get('file_message'):
-        if "⚠️" in st.session_state['file_message']:
-            st.warning(st.session_state['file_message'])
+        if "❌" in st.session_state['file_message']:
+            st.markdown(st.session_state['file_message'], unsafe_allow_html=True)
         else:
-            st.error(st.session_state['file_message'])
+            st.warning(st.session_state['file_message'])
 
     # Text Area
     yiddish_text = st.text_area(
         "Paste Yiddish text here...", 
         height=600, 
         key="input_area", # WIDGET KEY
-        # We don't use 'value=' here because the key takes precedence in Streamlit
         on_change=on_text_change
     )
 
@@ -494,7 +510,7 @@ with col2:
         if not api_key:
             st.error("Please enter your API Key in the sidebar.")
         
-        # CHECK WIDGET CONTENT DIRECTLY
+        # CHECK WIDGET CONTENT
         elif not yiddish_text:
             st.warning("Please paste text to translate.")
         
