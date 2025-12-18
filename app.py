@@ -6,6 +6,7 @@ from docx import Document
 import io
 import time
 import concurrent.futures
+import re
 
 # --- PAGE CONFIG ---
 st.set_page_config(
@@ -21,8 +22,8 @@ if 'confirm_clear' not in st.session_state:
     st.session_state['confirm_clear'] = False
 if 'input_text' not in st.session_state:
     st.session_state['input_text'] = ""
-if 'file_error' not in st.session_state:
-    st.session_state['file_error'] = None
+if 'file_message' not in st.session_state:
+    st.session_state['file_message'] = None
 
 # --- CALLBACKS ---
 def on_text_change():
@@ -41,26 +42,53 @@ def confirm_clear_action():
     st.session_state['result'] = None
     st.session_state['input_text'] = ""
     st.session_state['confirm_clear'] = False
-    st.session_state['file_error'] = None
+    st.session_state['file_message'] = None
     st.rerun()
 
 def cancel_clear():
     """Cancel the clear request."""
     st.session_state['confirm_clear'] = False
 
+def scavenge_binary_text(file_bytes):
+    """
+    Last resort: Treat file as binary garbage and regex-search for Hebrew/English strings.
+    This works for .doc files where text is stored in CP1255 or UTF-16.
+    """
+    text_found = ""
+    
+    # Attempt 1: Decode as CP1255 (Hebrew Windows) and look for text blocks
+    try:
+        # Decode broadly, replacing errors
+        content = file_bytes.getvalue().decode('cp1255', errors='replace')
+        
+        # Regex to find chunks of Hebrew or English text (min 3 chars)
+        # Matches Hebrew chars, English chars, numbers, and basic punctuation
+        pattern = r"[\u0590-\u05FFa-zA-Z0-9\s\.,:;\"\'\-\(\)]{3,}"
+        matches = re.findall(pattern, content)
+        
+        # Filter matches that look like noise (too short or just whitespace)
+        clean_matches = [m.strip() for m in matches if len(m.strip()) > 3]
+        
+        if clean_matches:
+            text_found = "\n".join(clean_matches)
+    except Exception:
+        pass
+
+    return text_found
+
 def handle_file_upload():
-    """Robust file reader that attempts multiple formats."""
+    """Robust file reader with a 'Brute Force' fallback for .doc files."""
     uploaded_file = st.session_state.uploaded_file
-    st.session_state['file_error'] = None # Reset errors
+    st.session_state['file_message'] = None # Reset messages
     
     if uploaded_file is not None:
         file_name = uploaded_file.name.lower()
         success = False
         
-        # ATTEMPT 1: Try reading as a modern DOCX (even if named .doc)
+        # ATTEMPT 1: Modern DOCX (standard)
         if not success:
             try:
-                # We copy the file into memory to avoid seeking issues on retries
+                # Copy bytes to memory for safety
                 file_bytes = io.BytesIO(uploaded_file.getvalue())
                 doc = Document(file_bytes)
                 full_text = []
@@ -69,9 +97,9 @@ def handle_file_upload():
                 st.session_state['input_text'] = '\n'.join(full_text)
                 success = True
             except Exception:
-                pass # Fail silently, try next method
+                pass 
 
-        # ATTEMPT 2: Try reading as plain text (UTF-8)
+        # ATTEMPT 2: Plain Text (UTF-8)
         if not success:
             try:
                 stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
@@ -80,16 +108,28 @@ def handle_file_upload():
             except Exception:
                 pass
 
-        # ATTEMPT 3: Try reading as legacy text (Latin-1/Windows-1255)
+        # ATTEMPT 3: Plain Text (Hebrew Legacy CP1255)
         if not success:
             try:
-                stringio = io.StringIO(uploaded_file.getvalue().decode("latin-1"))
+                stringio = io.StringIO(uploaded_file.getvalue().decode("cp1255"))
                 content = stringio.read()
-                # If it looks like binary garbage, reject it
-                if "\x00" in content: 
-                    raise ValueError("Binary detected")
+                # Check for null bytes which indicate binary file, not text
+                if content.count('\x00') > 5: 
+                    raise ValueError("Binary file")
                 st.session_state['input_text'] = content
                 success = True
+            except Exception:
+                pass
+
+        # ATTEMPT 4: BRUTE FORCE SCAVENGER (For legacy .doc)
+        if not success:
+            try:
+                raw_bytes = io.BytesIO(uploaded_file.getvalue())
+                scavenged_text = scavenge_binary_text(raw_bytes)
+                if len(scavenged_text) > 10: # If we found something substantial
+                    st.session_state['input_text'] = scavenged_text
+                    st.session_state['file_message'] = "⚠️ **Note:** We forced open this legacy file. Formatting may be lost, but the text is extracted."
+                    success = True
             except Exception:
                 pass
 
@@ -97,11 +137,10 @@ def handle_file_upload():
         if success:
             st.session_state['result'] = None
         else:
-            # If all methods fail, it is likely a true binary .doc file
             if file_name.endswith('.doc'):
-                st.session_state['file_error'] = "⚠️ **Legacy .DOC File Detected**<br>This is an old binary Word format that cannot be read directly.<br>👉 **Solution:** Open the file in Word, go to **File > Save As**, and choose **Word Document (.docx)**."
+                st.session_state['file_message'] = "❌ **Could not read file.** This .doc file is too complex for the web extractor. Please save it as .docx in Word and try again."
             else:
-                st.session_state['file_error'] = "❌ **Unreadable File:** Could not extract text. Please ensure it is a valid .docx or .txt file."
+                st.session_state['file_message'] = "❌ **Unreadable File.** Please upload a valid .docx or .txt file."
 
 # --- CUSTOM CSS ---
 st.markdown("""
@@ -409,7 +448,7 @@ col1, col2 = st.columns([1, 1], gap="large")
 with col1:
     st.markdown("### Input Transcript")
     
-    # File Uploader (NO TYPE RESTRICTION - HANDLED IN LOGIC)
+    # File Uploader (NO TYPE RESTRICTION)
     st.file_uploader(
         "Upload File (.txt or .docx)", 
         type=None, 
@@ -418,9 +457,12 @@ with col1:
         label_visibility="collapsed"
     )
     
-    # Error Message for File Upload
-    if st.session_state.get('file_error'):
-        st.error(st.session_state['file_error'], icon="⚠️")
+    # Message for File Upload
+    if st.session_state.get('file_message'):
+        if "⚠️" in st.session_state['file_message']:
+            st.warning(st.session_state['file_message'])
+        else:
+            st.error(st.session_state['file_message'])
 
     # Text Area
     yiddish_text = st.text_area(
