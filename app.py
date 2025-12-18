@@ -16,6 +16,9 @@ st.set_page_config(
 # --- CUSTOM CSS (The Design Overhaul) ---
 st.markdown("""
 <style>
+    /* IMPORT HEBREW FONT (Frank Ruhl Libre) */
+    @import url('https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;700&display=swap');
+
     /* MAIN BACKGROUND */
     .stApp {
         background-color: #FDFBF7;
@@ -28,13 +31,13 @@ st.markdown("""
         border-right: 1px solid #E0DACC;
     }
 
-    /* HEADERS (H1, H2, H3) */
+    /* HEADERS */
     h1, h2, h3, h4, .stMarkdown {
         color: #4A3B32 !important;
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }
     
-    /* CUSTOM "COPPER" BUTTONS */
+    /* CUSTOM BUTTONS */
     div.stButton > button {
         background: linear-gradient(135deg, #A67C52 0%, #8B5A2B 100%);
         color: white !important;
@@ -52,7 +55,7 @@ st.markdown("""
         transform: translateY(-1px);
     }
 
-    /* TEXT AREAS (INPUT) */
+    /* INPUT TEXT AREA */
     .stTextArea textarea {
         background-color: #FFFFFF;
         border: 1px solid #D7D0C0;
@@ -60,28 +63,69 @@ st.markdown("""
         color: #333333;
         box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
     }
-    
-    /* SUCCESS/INFO BOXES */
-    .stAlert {
-        background-color: #FFFFFF;
-        border: 1px solid #D7D0C0;
+
+    /* --- TABLE STYLING (NEW) --- */
+    .results-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        background-color: #FFF;
         border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    .results-table th {
+        background-color: #EBE5D5;
         color: #4A3B32;
+        padding: 12px 15px;
+        text-align: left;
+        font-weight: bold;
+        border-bottom: 2px solid #D7D0C0;
     }
 
-    /* DIVIDER */
-    hr {
-        border-color: #D7D0C0;
+    .results-table td {
+        padding: 12px 15px;
+        border-bottom: 1px solid #F0EAE0;
+        vertical-align: top;
+        color: #333;
+    }
+
+    .results-table tr:last-child td {
+        border-bottom: none;
+    }
+    
+    .id-col {
+        width: 50px;
+        color: #8B5A2B;
+        font-weight: bold;
+        font-size: 0.85em;
+    }
+    
+    .yiddish-col {
+        font-family: 'Frank Ruhl Libre', serif; /* NEW CLEAR HEBREW FONT */
+        font-size: 1.2em;
+        direction: rtl;
+        text-align: right;
+        color: #222;
+        width: 45%;
+        line-height: 1.4;
+    }
+
+    .english-col {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 1.05em;
+        line-height: 1.4;
+        width: 45%;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR (SETTINGS ONLY) ---
+# --- SIDEBAR (SETTINGS) ---
 with st.sidebar:
     st.markdown("### Settings")
     api_key = st.text_input("Enter Google API Key", type="password")
     
-    # --- THE V54 PROMPT (UNTOUCHED) ---
     default_prompt = """
 # Role
 You are a master subtitler adapting the Lubavitcher Rebbe’s Sichos. Your goal is to produce **narrative, high-impact English** that captures the speaker's voice while adhering to strict video-subtitle standards.
@@ -201,32 +245,28 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
             return False, str(e)
     return False, "MAX_RETRIES_EXCEEDED"
 
-# --- MAIN PAGE HEADER (LOGO TOP RIGHT) ---
-# Create two columns: Title (Left, wider) and Logo (Right, narrower)
+# --- HEADER (LOGO RIGHT) ---
 header_col1, header_col2 = st.columns([5, 1])
-
 with header_col1:
     st.title("JEM English Subtitle Generator For Sichos")
-
 with header_col2:
     st.image("https://cdn.prod.website-files.com/67dd48176b6e7b21cf6cc9bc/67ecd01b1392af3e91a89ee2_d68e8bf608547d781d6eaf13a23203df_jem%20ai%20hero.svg", use_column_width=True)
 
 st.markdown("---")
 
-# --- MAIN INPUT/OUTPUT LAYOUT ---
+# --- MAIN LAYOUT ---
 col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
     st.markdown("### Input Transcript") 
-    yiddish_text = st.text_area("Paste Yiddish text here...", height=600, key="input_area", help="Paste the raw Yiddish transcript.")
+    yiddish_text = st.text_area("Paste Yiddish text here...", height=600, key="input_area")
 
 with col2:
     st.markdown("### Generated Subtitles")
     
-    # Placeholder for where results go
+    # Placeholder
     result_container = st.container()
 
-    # The Translate Button (Centered in Logic)
     if st.button("TRANSLATE", type="primary", use_container_width=True):
         if not api_key:
             st.error("Please enter your API Key in the sidebar.")
@@ -237,7 +277,7 @@ with col2:
             target_model = "models/gemini-2.5-flash" 
             combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
 
-            status_box.info(f"🚀 Processing with JEM Engine (Model: {target_model})...")
+            status_box.info(f"🚀 Processing (Model: {target_model})...")
             
             success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
             
@@ -256,51 +296,67 @@ with col2:
                 else:
                     status_box.error(f"❌ Failed: {result}")
 
-    # --- RESULT DISPLAY ---
+    # --- RESULTS DISPLAY (TABLE FORMAT) ---
     if 'result' in st.session_state:
         raw_text = st.session_state['result']
         
-        # Parse
+        # Parse Data
         data = []
         for line in raw_text.split('\n'):
             if "|" in line and "ID |" not in line and "---" not in line:
                 parts = line.split('|')
                 if len(parts) >= 3:
                     data.append({
-                        "#": parts[0].strip(),
-                        "Yiddish": parts[1].strip(),
-                        "English": parts[2].strip().replace("~", "<br>")
+                        "id": parts[0].strip(),
+                        "yiddish": parts[1].strip(),
+                        "english": parts[2].strip().replace("~", "<br>")
                     })
         
-        # Display Cards
         with result_container:
             if data:
-                df = pd.DataFrame(data)
+                # Build HTML Table
+                table_html = """
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th style="width:50px;">ID</th>
+                            <th style="text-align:right;">Yiddish Source</th>
+                            <th>English Subtitle</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                """
                 
-                # Custom Card Display
-                for idx, row in df.iterrows():
-                    st.markdown(f"""
-                    <div style="background-color: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #E0DACC;">
-                        <div style="color: #8B5A2B; font-size: 0.8em; font-weight: bold; margin-bottom: 5px;">{row['#']}</div>
-                        <div style="font-family: monospace; color: #666; font-size: 0.9em; margin-bottom: 8px;">{row['Yiddish']}</div>
-                        <div style="font-size: 1.1em; color: #333; font-weight: 600; line-height: 1.4;">{row['English']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                for row in data:
+                    table_html += f"""
+                    <tr>
+                        <td class="id-col">{row['id']}</td>
+                        <td class="yiddish-col">{row['yiddish']}</td>
+                        <td class="english-col">{row['english']}</td>
+                    </tr>
+                    """
+                
+                table_html += "</tbody></table>"
+                
+                # Render Table
+                st.markdown(table_html, unsafe_allow_html=True)
                 
                 # DOCX Export
+                df = pd.DataFrame(data)
                 doc = Document()
                 table = doc.add_table(rows=1, cols=3)
                 table.style = 'Table Grid'
                 for idx, row in df.iterrows():
                     cells = table.add_row().cells
-                    cells[0].text = row['#']
-                    cells[1].text = row['Yiddish']
-                    cells[2].text = row['English'].replace("<br>", "\n")
+                    cells[0].text = row['id']
+                    cells[1].text = row['yiddish']
+                    cells[2].text = row['english'].replace("<br>", "\n")
                 
                 bio = io.BytesIO()
                 doc.save(bio)
+                st.markdown("<br>", unsafe_allow_html=True)
                 st.download_button("Download DOCX", bio.getvalue(), "translation.docx", use_container_width=True)
             
-            # Fallback View
+            # Raw Fallback
             with st.expander("View Raw Output"):
                 st.text(raw_text)
