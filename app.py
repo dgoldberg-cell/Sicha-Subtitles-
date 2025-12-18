@@ -6,7 +6,6 @@ from docx import Document
 import io
 import time
 import concurrent.futures
-import re
 
 # --- PAGE CONFIG ---
 st.set_page_config(
@@ -51,48 +50,32 @@ def cancel_clear():
     """Cancel the clear request."""
     st.session_state['confirm_clear'] = False
 
-def has_hebrew(text):
-    """Check if text contains Hebrew characters."""
-    return bool(re.search(r'[\u0590-\u05FF]', text))
-
-def scavenge_binary_text(file_bytes):
-    """
-    Smart Scavenger: Tries multiple encodings and only accepts if Hebrew is found.
-    """
-    encodings_to_try = ['utf-8', 'cp1255', 'iso-8859-8', 'windows-1255']
-    raw_data = file_bytes.getvalue()
-    
-    for enc in encodings_to_try:
-        try:
-            # Decode ignoring errors to get 'something'
-            content = raw_data.decode(enc, errors='ignore')
-            
-            # Check for Hebrew characters
-            if has_hebrew(content):
-                # If we found Hebrew, clean it up
-                # Find sequences of Hebrew or English (skip binary control chars)
-                pattern = r"[\u0590-\u05FFa-zA-Z0-9\s\.,:;\"\'\-\(\)]{3,}"
-                matches = re.findall(pattern, content)
-                clean_matches = [m.strip() for m in matches if len(m.strip()) > 3]
-                
-                if clean_matches:
-                    return "\n".join(clean_matches)
-        except Exception:
-            continue
-
-    return ""
-
 def handle_file_upload():
-    """Robust file reader."""
+    """Robust file reader for .docx and .txt (Blocks .doc)."""
     uploaded_file = st.session_state.uploaded_file
     st.session_state['file_message'] = None 
     
     if uploaded_file is not None:
         file_name = uploaded_file.name.lower()
+        
+        # 1. BLOCK OLD .DOC FILES
+        if file_name.endswith('.doc'):
+            st.session_state['input_area'] = ""
+            st.session_state['file_message'] = """
+            ❌ **Legacy File Detected (.doc)**<br>
+            This file format (Word 97-2003) often uses incompatible fonts that appear as garbage text.<br>
+            **Please convert it yourself to ensure accuracy:**<br>
+            1. Open file in Word.<br>
+            2. Go to **File > Save As**.<br>
+            3. Choose **Word Document (.docx)** or **Plain Text (.txt)**.<br>
+            4. Upload the new file here.
+            """
+            return # Stop here
+
         success = False
         extracted_text = ""
         
-        # ATTEMPT 1: Modern DOCX
+        # 2. ATTEMPT .DOCX (Standard)
         if not success:
             try:
                 file_bytes = io.BytesIO(uploaded_file.getvalue())
@@ -105,30 +88,21 @@ def handle_file_upload():
             except Exception:
                 pass 
 
-        # ATTEMPT 2: Plain Text (UTF-8 / CP1255)
+        # 3. ATTEMPT PLAIN TEXT (.TXT) - UTF-8
         if not success:
             try:
-                # Try UTF-8 first
                 extracted_text = uploaded_file.getvalue().decode("utf-8")
                 success = True
             except:
-                try:
-                    # Try Hebrew Windows
-                    extracted_text = uploaded_file.getvalue().decode("cp1255")
-                    success = True
-                except:
-                    pass
+                pass
 
-        # ATTEMPT 3: SMART SCAVENGER (The "Garbage Filter")
+        # 4. ATTEMPT PLAIN TEXT - HEBREW ENCODING (Windows-1255)
+        # This fixes .txt files saved on old Hebrew Windows
         if not success:
             try:
-                raw_bytes = io.BytesIO(uploaded_file.getvalue())
-                scavenged = scavenge_binary_text(raw_bytes)
-                if scavenged:
-                    extracted_text = scavenged
-                    st.session_state['file_message'] = "⚠️ **Legacy File Read:** Extracted text using Hebrew encoding. Formatting may be lost."
-                    success = True
-            except Exception:
+                extracted_text = uploaded_file.getvalue().decode("cp1255")
+                success = True
+            except:
                 pass
 
         # RESULT
@@ -137,22 +111,8 @@ def handle_file_upload():
             st.session_state['input_area'] = extracted_text # FORCE WIDGET UPDATE
             st.session_state['result'] = None
         else:
-            # If we failed or extracted nothing but whitespace
-            st.session_state['input_area'] = "" # Clear garbage
-            st.session_state['input_text'] = ""
-            
-            if file_name.endswith('.doc'):
-                st.session_state['file_message'] = """
-                ❌ **Legacy Format Error**<br>
-                The file you uploaded is an old Word 97-2003 binary file (.doc) and we could not extract clear Hebrew text from it.<br><br>
-                **Solution:**<br>
-                1. Open the file in Microsoft Word.<br>
-                2. Go to **File > Save As**.<br>
-                3. Choose **Word Document (.docx)**.<br>
-                4. Upload the new .docx file here.
-                """
-            else:
-                st.session_state['file_message'] = "❌ **Unreadable File.** Please upload a valid .docx or .txt file."
+            st.session_state['input_area'] = ""
+            st.session_state['file_message'] = "❌ **Unreadable File.** Please upload a valid .docx or .txt file."
 
 # --- CUSTOM CSS ---
 st.markdown("""
