@@ -13,7 +13,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CUSTOM CSS (The Design Overhaul) ---
+# --- CUSTOM CSS ---
 st.markdown("""
 <style>
     /* IMPORT HEBREW FONTS */
@@ -91,7 +91,7 @@ st.markdown("""
     .results-table td {
         padding: 12px 15px;
         border-bottom: 1px solid #F0EAE0;
-        vertical-align: top; /* Align text to top */
+        vertical-align: top; 
         color: #333;
     }
 
@@ -113,7 +113,7 @@ st.markdown("""
     
     .yiddish-col {
         font-family: 'Frank Ruhl Libre', 'Alef', serif;
-        font-size: 1.25em; /* Slightly larger for readability */
+        font-size: 1.3em;
         direction: rtl;
         text-align: right;
         color: #222;
@@ -244,7 +244,7 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
                 except KeyError:
                     return False, f"Parsed JSON but found no text: {result_json}"
             elif response.status_code == 503:
-                st.toast(f"⚠️ Server Busy (Attempt {attempt+1}/{max_retries}). Retrying...", icon="⏳")
+                # Silent retry logic, let the spinner handle the UI
                 time.sleep(3)
                 continue
             elif response.status_code == 404:
@@ -283,28 +283,25 @@ with col2:
         elif not yiddish_text:
             st.warning("Please paste text to translate.")
         else:
-            status_box = st.empty()
             target_model = "models/gemini-2.5-flash" 
             combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
 
-            status_box.info(f"🚀 Processing (Model: {target_model})...")
-            
-            success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
+            # --- CUSTOM SPINNER MESSAGE ---
+            with st.spinner("Bringing the Rebbe to the English speaking world..."):
+                success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
             
             if success:
-                status_box.success("✅ Translation Complete")
                 st.session_state['result'] = result
             else:
                 if result == "NOT_FOUND":
-                     status_box.warning("2.5 Flash not found. Trying backup...")
-                     success_bk, result_bk = attempt_translation_with_retries("models/gemini-1.5-flash", api_key, combined_prompt)
+                     with st.spinner("Switching to backup model..."):
+                         success_bk, result_bk = attempt_translation_with_retries("models/gemini-1.5-flash", api_key, combined_prompt)
                      if success_bk:
                          st.session_state['result'] = result_bk
-                         status_box.success("✅ Connected (via Backup)")
                      else:
-                         status_box.error(f"❌ Failed: {result}")
+                         st.error(f"❌ Failed: {result}")
                 else:
-                    status_box.error(f"❌ Failed: {result}")
+                    st.error(f"❌ Failed: {result}")
 
     # --- RESULTS DISPLAY (TABLE FORMAT) ---
     if 'result' in st.session_state:
@@ -327,27 +324,24 @@ with col2:
         
         with result_container:
             if data:
-                # Build HTML Table
-                table_html = """
-                <table class="results-table">
-                    <thead>
-                        <tr>
-                            <th style="width:50px;">ID</th>
-                            <th style="text-align:right;">Yiddish Source</th>
-                            <th>English Subtitle</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                """
+                # Build HTML Table (NO INDENTATION in the string to prevent code-block rendering)
+                table_html = """<table class="results-table">
+<thead>
+<tr>
+<th style="width:50px;">ID</th>
+<th style="text-align:right;">Yiddish Source</th>
+<th>English Subtitle</th>
+</tr>
+</thead>
+<tbody>"""
                 
                 for row in data:
-                    table_html += f"""
-                    <tr>
-                        <td class="id-col">{row['id']}</td>
-                        <td class="yiddish-col">{row['yiddish']}</td>
-                        <td class="english-col">{row['english_clean']}</td>
-                    </tr>
-                    """
+                    # Append rows without indentation
+                    table_html += f"""<tr>
+<td class="id-col">{row['id']}</td>
+<td class="yiddish-col">{row['yiddish']}</td>
+<td class="english-col">{row['english_clean']}</td>
+</tr>"""
                 
                 table_html += "</tbody></table>"
                 
@@ -370,6 +364,6 @@ with col2:
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.download_button("Download DOCX", bio.getvalue(), "translation.docx", use_container_width=True)
             
-            # Raw Fallback
+            # Raw Fallback (Hidden in Expander)
             with st.expander("View Raw Output"):
                 st.text(raw_text)
