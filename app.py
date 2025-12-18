@@ -16,16 +16,28 @@ st.set_page_config(
 # --- SESSION STATE INITIALIZATION ---
 if 'result' not in st.session_state:
     st.session_state['result'] = None
+if 'confirm_clear' not in st.session_state:
+    st.session_state['confirm_clear'] = False
 
 # --- CALLBACKS ---
 def on_text_change():
     """Clear previous results immediately when text changes."""
     st.session_state['result'] = None
+    st.session_state['confirm_clear'] = False
 
-def clear_all():
-    """Clear text area and results."""
+def request_clear():
+    """Trigger the confirmation dialog."""
+    st.session_state['confirm_clear'] = True
+
+def confirm_clear_action():
+    """Actually clear the data."""
     st.session_state['result'] = None
     st.session_state['input_area'] = ""
+    st.session_state['confirm_clear'] = False
+
+def cancel_clear():
+    """Cancel the clear request."""
+    st.session_state['confirm_clear'] = False
 
 # --- CUSTOM CSS ---
 st.markdown("""
@@ -51,8 +63,8 @@ st.markdown("""
         font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
     }
     
-    /* CUSTOM BUTTONS */
-    div.stButton > button {
+    /* PRIMARY BUTTON (TRANSLATE) */
+    div.stButton > button[kind="primary"] {
         background: linear-gradient(135deg, #A67C52 0%, #8B5A2B 100%);
         color: white !important;
         border: none;
@@ -63,22 +75,26 @@ st.markdown("""
         transition: all 0.3s ease;
     }
     
-    div.stButton > button:hover {
+    div.stButton > button[kind="primary"]:hover {
         background: linear-gradient(135deg, #8B5A2B 0%, #6F4E37 100%);
         box-shadow: 0 6px 8px rgba(139, 90, 43, 0.3);
         transform: translateY(-1px);
     }
     
-    /* SECONDARY BUTTON (CLEAR) STYLE */
-    button[kind="secondary"] {
-        background: transparent !important;
-        border: 2px solid #A67C52 !important;
-        color: #A67C52 !important;
-        box-shadow: none !important;
+    /* SECONDARY BUTTON (CLEAR) - FIXED VISIBILITY */
+    div.stButton > button[kind="secondary"] {
+        background-color: #FFFFFF !important;
+        border: 2px solid #8B5A2B !important;
+        color: #8B5A2B !important; /* Dark Brown Text Always Visible */
+        font-weight: bold !important;
+        border-radius: 8px;
+        transition: all 0.3s ease;
     }
-    button[kind="secondary"]:hover {
-        background: #F3F0E6 !important;
-        color: #8B5A2B !important;
+    
+    div.stButton > button[kind="secondary"]:hover {
+        background-color: #F3F0E6 !important;
+        color: #6F4E37 !important;
+        border-color: #6F4E37 !important;
     }
 
     /* INPUT TEXT AREA */
@@ -310,12 +326,22 @@ with col2:
     with b_col1:
         translate_btn = st.button("TRANSLATE", type="primary", use_container_width=True)
     with b_col2:
-        clear_btn = st.button("CLEAR / NEW", type="secondary", use_container_width=True, on_click=clear_all)
+        # Calls request_clear() to trigger the safety dialog
+        clear_btn = st.button("CLEAR", type="secondary", use_container_width=True, on_click=request_clear)
+
+    # --- CONFIRMATION DIALOG ---
+    if st.session_state.get('confirm_clear'):
+        st.warning("⚠️ **Are you sure?** Unsaved translations will be lost.")
+        conf_col1, conf_col2 = st.columns([1, 1])
+        with conf_col1:
+            st.button("Yes, Clear Everything", type="primary", use_container_width=True, on_click=confirm_clear_action)
+        with conf_col2:
+            st.button("No, Cancel", type="secondary", use_container_width=True, on_click=cancel_clear)
 
     # Placeholder for logic
     result_container = st.container()
 
-    if translate_btn:
+    if translate_btn and not st.session_state.get('confirm_clear'):
         if not api_key:
             st.error("Please enter your API Key in the sidebar.")
         elif not yiddish_text:
@@ -341,7 +367,7 @@ with col2:
                     st.error(f"❌ Failed: {result}")
 
     # --- RESULTS DISPLAY ---
-    if st.session_state.get('result'):
+    if st.session_state.get('result') and not st.session_state.get('confirm_clear'):
         raw_text = st.session_state['result']
         
         # Parse Data
