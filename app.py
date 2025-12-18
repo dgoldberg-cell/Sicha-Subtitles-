@@ -83,7 +83,7 @@ st.markdown("""
         transform: translateY(-1px);
     }
     
-    /* SECONDARY BUTTON (CLEAR) - FIXED VISIBILITY */
+    /* SECONDARY BUTTON (CLEAR) */
     div.stButton > button[kind="secondary"] {
         background-color: #FFFFFF !important;
         border: 2px solid #8B5A2B !important;
@@ -299,6 +299,30 @@ def call_api(model_name, api_key, full_prompt):
     except Exception as e:
         return False, str(e)
 
+# --- RENDERER FOR LOADING ANIMATION ---
+def render_steps(steps, current_idx):
+    html_content = '<div class="step-box">'
+    html_content += '<div style="margin-bottom:10px; font-weight:bold; color:#4A3B32;">Bringing the Rebbe to the English speaking world...</div>'
+    
+    for i, step_text in enumerate(steps):
+        if i < current_idx:
+            # Completed
+            icon = "✅"
+            cls = "step-item done"
+        elif i == current_idx:
+            # Active
+            icon = "🔄"
+            cls = "step-item active"
+        else:
+            # Pending
+            icon = "⚪"
+            cls = "step-item"
+        
+        html_content += f'<div class="{cls}"><span class="step-icon">{icon}</span>{step_text}</div>'
+    
+    html_content += '</div>'
+    return html_content
+
 # --- HEADER (LOGO RIGHT) ---
 header_col1, header_col2 = st.columns([5, 1])
 with header_col1:
@@ -350,10 +374,10 @@ with col2:
         else:
             combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
             
-            # --- THE LOADING SIMULATION ---
+            # --- THE PACED LOADING SIMULATION ---
             loading_placeholder = st.empty()
             
-            # Logic Steps Definition
+            # Steps to display
             steps = [
                 "Analyzing First-Person Perspective...",
                 "Applying Segmentation Rules...",
@@ -367,48 +391,39 @@ with col2:
             executor = concurrent.futures.ThreadPoolExecutor()
             future = executor.submit(call_api, "models/gemini-2.5-flash", api_key, combined_prompt)
             
-            # Loop for Animation while waiting
-            step_idx = 0
-            start_time = time.time()
+            # Animation Loop
+            total_steps = len(steps)
+            current_step = 0
             
+            # We enforce a minimum time per step to make it readable
+            # but we also check if the future is done to not wait forever 
+            # if the API is actually super slow (rare, but good practice).
+            
+            while current_step < total_steps:
+                # Render current state
+                loading_placeholder.markdown(render_steps(steps, current_step), unsafe_allow_html=True)
+                
+                # Wait a fixed amount of time per step (e.g. 1.2 seconds) to ensure readability
+                time.sleep(1.2)
+                
+                # If API is done early, we still finish the animation loop visually
+                # If API is slow, we will hold on the last step (handled below)
+                current_step += 1
+            
+            # If the loop finished but API is still running, show "Finalizing..." on the last step
             while not future.done():
-                # Build HTML for current state
-                html_content = '<div class="step-box">'
-                html_content += '<div style="margin-bottom:10px; font-weight:bold; color:#4A3B32;">Bringing the Rebbe to the English speaking world...</div>'
-                
-                for i, step_text in enumerate(steps):
-                    if i < step_idx:
-                        # Completed steps
-                        icon = "✅"
-                        cls = "step-item done"
-                    elif i == step_idx:
-                        # Current step
-                        icon = "🔄"
-                        cls = "step-item active"
-                    else:
-                        # Pending steps
-                        icon = "⚪"
-                        cls = "step-item"
-                    
-                    html_content += f'<div class="{cls}"><span class="step-icon">{icon}</span>{step_text}</div>'
-                
-                html_content += '</div>'
-                loading_placeholder.markdown(html_content, unsafe_allow_html=True)
-                
-                # Advance step slowly (simulate thinking)
-                time.sleep(0.8) # Update speed
-                if step_idx < len(steps) - 1:
-                    step_idx += 1
-            
+                 loading_placeholder.markdown(render_steps(steps, total_steps - 1), unsafe_allow_html=True)
+                 time.sleep(0.5)
+
             # Get Result
             success, result = future.result()
             
-            # If not found, try backup (Standard UI spinner for backup)
+            # If not found, try backup
             if not success and result == "NOT_FOUND":
                  loading_placeholder.info("Trying backup model...")
                  success, result = call_api("models/gemini-1.5-flash", api_key, combined_prompt)
 
-            # Cleanup Loader
+            # Clear Loader
             loading_placeholder.empty()
 
             if success:
