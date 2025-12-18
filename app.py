@@ -76,11 +76,8 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- SIDEBAR ---
+# --- SIDEBAR (SETTINGS ONLY) ---
 with st.sidebar:
-    # JEM AI LOGO
-    st.image("https://cdn.prod.website-files.com/67dd48176b6e7b21cf6cc9bc/67ecd01b1392af3e91a89ee2_d68e8bf608547d781d6eaf13a23203df_jem%20ai%20hero.svg", use_column_width=True)
-    
     st.markdown("### Settings")
     api_key = st.text_input("Enter Google API Key", type="password")
     
@@ -204,10 +201,19 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
             return False, str(e)
     return False, "MAX_RETRIES_EXCEEDED"
 
-# --- MAIN PAGE ---
-st.title("JEM English Subtitle Generator For Sichos")
+# --- MAIN PAGE HEADER (LOGO TOP RIGHT) ---
+# Create two columns: Title (Left, wider) and Logo (Right, narrower)
+header_col1, header_col2 = st.columns([5, 1])
+
+with header_col1:
+    st.title("JEM English Subtitle Generator For Sichos")
+
+with header_col2:
+    st.image("https://cdn.prod.website-files.com/67dd48176b6e7b21cf6cc9bc/67ecd01b1392af3e91a89ee2_d68e8bf608547d781d6eaf13a23203df_jem%20ai%20hero.svg", use_column_width=True)
+
 st.markdown("---")
 
+# --- MAIN INPUT/OUTPUT LAYOUT ---
 col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
