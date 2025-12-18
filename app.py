@@ -13,6 +13,20 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# --- SESSION STATE INITIALIZATION ---
+if 'result' not in st.session_state:
+    st.session_state['result'] = None
+
+# --- CALLBACKS ---
+def on_text_change():
+    """Clear previous results immediately when text changes."""
+    st.session_state['result'] = None
+
+def clear_all():
+    """Clear text area and results."""
+    st.session_state['result'] = None
+    st.session_state['input_area'] = ""
+
 # --- CUSTOM CSS ---
 st.markdown("""
 <style>
@@ -53,6 +67,18 @@ st.markdown("""
         background: linear-gradient(135deg, #8B5A2B 0%, #6F4E37 100%);
         box-shadow: 0 6px 8px rgba(139, 90, 43, 0.3);
         transform: translateY(-1px);
+    }
+    
+    /* SECONDARY BUTTON (CLEAR) STYLE */
+    button[kind="secondary"] {
+        background: transparent !important;
+        border: 2px solid #A67C52 !important;
+        color: #A67C52 !important;
+        box-shadow: none !important;
+    }
+    button[kind="secondary"]:hover {
+        background: #F3F0E6 !important;
+        color: #8B5A2B !important;
     }
 
     /* INPUT TEXT AREA */
@@ -244,7 +270,6 @@ def attempt_translation_with_retries(model_name, api_key, full_prompt, max_retri
                 except KeyError:
                     return False, f"Parsed JSON but found no text: {result_json}"
             elif response.status_code == 503:
-                # Silent retry logic, let the spinner handle the UI
                 time.sleep(3)
                 continue
             elif response.status_code == 404:
@@ -269,15 +294,28 @@ col1, col2 = st.columns([1, 1], gap="large")
 
 with col1:
     st.markdown("### Input Transcript") 
-    yiddish_text = st.text_area("Paste Yiddish text here...", height=600, key="input_area")
+    # Added on_change callback to clear results when user types
+    yiddish_text = st.text_area(
+        "Paste Yiddish text here...", 
+        height=600, 
+        key="input_area",
+        on_change=on_text_change
+    )
 
 with col2:
     st.markdown("### Generated Subtitles")
     
-    # Placeholder
+    # Buttons Row
+    b_col1, b_col2 = st.columns([3, 2])
+    with b_col1:
+        translate_btn = st.button("TRANSLATE", type="primary", use_container_width=True)
+    with b_col2:
+        clear_btn = st.button("CLEAR / NEW", type="secondary", use_container_width=True, on_click=clear_all)
+
+    # Placeholder for logic
     result_container = st.container()
 
-    if st.button("TRANSLATE", type="primary", use_container_width=True):
+    if translate_btn:
         if not api_key:
             st.error("Please enter your API Key in the sidebar.")
         elif not yiddish_text:
@@ -286,7 +324,6 @@ with col2:
             target_model = "models/gemini-2.5-flash" 
             combined_prompt = f"{system_prompt}\n\n---\n\nTASK: Translate this text:\n{yiddish_text}"
 
-            # --- CUSTOM SPINNER MESSAGE ---
             with st.spinner("Bringing the Rebbe to the English speaking world..."):
                 success, result = attempt_translation_with_retries(target_model, api_key, combined_prompt)
             
@@ -303,8 +340,8 @@ with col2:
                 else:
                     st.error(f"❌ Failed: {result}")
 
-    # --- RESULTS DISPLAY (TABLE FORMAT) ---
-    if 'result' in st.session_state:
+    # --- RESULTS DISPLAY ---
+    if st.session_state.get('result'):
         raw_text = st.session_state['result']
         
         # Parse Data
@@ -316,15 +353,13 @@ with col2:
                     data.append({
                         "id": parts[0].strip(),
                         "yiddish": parts[1].strip(),
-                        # For Screen: Replace ~ with space for clean reading
                         "english_clean": parts[2].strip().replace("~", " "),
-                        # For Export: Keep ~ (or use \n) for subtitle separation
                         "english_raw": parts[2].strip().replace("~", "\n")
                     })
         
         with result_container:
             if data:
-                # Build HTML Table (NO INDENTATION in the string to prevent code-block rendering)
+                # Build HTML Table (NO INDENTATION)
                 table_html = """<table class="results-table">
 <thead>
 <tr>
@@ -334,15 +369,12 @@ with col2:
 </tr>
 </thead>
 <tbody>"""
-                
                 for row in data:
-                    # Append rows without indentation
                     table_html += f"""<tr>
 <td class="id-col">{row['id']}</td>
 <td class="yiddish-col">{row['yiddish']}</td>
 <td class="english-col">{row['english_clean']}</td>
 </tr>"""
-                
                 table_html += "</tbody></table>"
                 
                 # Render Table
@@ -357,13 +389,12 @@ with col2:
                     cells = table.add_row().cells
                     cells[0].text = row['id']
                     cells[1].text = row['yiddish']
-                    cells[2].text = row['english_raw'] # Uses actual line breaks
+                    cells[2].text = row['english_raw']
                 
                 bio = io.BytesIO()
                 doc.save(bio)
                 st.markdown("<br>", unsafe_allow_html=True)
                 st.download_button("Download DOCX", bio.getvalue(), "translation.docx", use_container_width=True)
             
-            # Raw Fallback (Hidden in Expander)
             with st.expander("View Raw Output"):
                 st.text(raw_text)
