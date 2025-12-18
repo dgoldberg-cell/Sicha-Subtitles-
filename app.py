@@ -46,14 +46,26 @@ def cancel_clear():
     st.session_state['confirm_clear'] = False
 
 def handle_file_upload():
-    """Read uploaded file and populate text area."""
+    """Read uploaded file (TXT or DOCX) and populate text area."""
     uploaded_file = st.session_state.uploaded_file
     if uploaded_file is not None:
         try:
-            stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
-            file_content = stringio.read()
+            # Handle .docx files
+            if uploaded_file.name.lower().endswith('.docx'):
+                doc = Document(uploaded_file)
+                full_text = []
+                for para in doc.paragraphs:
+                    full_text.append(para.text)
+                file_content = '\n'.join(full_text)
+            
+            # Handle .txt files
+            else:
+                stringio = io.StringIO(uploaded_file.getvalue().decode("utf-8"))
+                file_content = stringio.read()
+            
+            # Update state
             st.session_state['input_text'] = file_content
-            st.session_state['result'] = None # Reset previous results on new file load
+            st.session_state['result'] = None # Reset results
         except Exception as e:
             st.error(f"Error reading file: {e}")
 
@@ -361,8 +373,8 @@ with col1:
     
     # File Uploader
     st.file_uploader(
-        "Upload Text File (.txt)", 
-        type=["txt"], 
+        "Upload File (.txt or .docx)", 
+        type=["txt", "docx"], 
         key="uploaded_file", 
         on_change=handle_file_upload,
         label_visibility="collapsed"
